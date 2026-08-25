@@ -1,66 +1,34 @@
-# Calendario Diritti di Visita
+# Calendario Diritti di Visita — v2
 
 App per segnare, gestire e generare mensilmente i moduli ufficiali
 "Richiesta prestazione speciale per diritti di visita" (USSI/URAR, Cantone Ticino).
 
+## Novità di questa versione
+
+- **Colori per figlio**: Kyan verde, Meryl turchese (estendibile ad altri figli)
+- **Vista combinata**: mostra entrambi i figli sullo stesso calendario senza cambiare scheda
+- **Navigazione a gesto**: scorri a sinistra/destra sul calendario per cambiare mese
+- **Design rinnovato**: superfici con profondità, statistiche più chiare, animazioni fluide
+- **Icone e manifest arricchiti**: icone maskable per Android, scorciatoie rapide ("Genera moduli", "Riepilogo")
+
 ## Uso rapido (senza pubblicare nulla)
 
-Basta aprire **index.html** direttamente sul telefono (in Chrome). L'app
-funziona subito, tutti i dati restano salvati solo sul tuo dispositivo.
-Per installarla come icona: menu Chrome ⋮ → "Aggiungi a schermata Home".
+Apri **index.html** direttamente sul telefono (in Chrome). Tutti i dati restano
+sul tuo dispositivo. Per installarla: menu Chrome ⋮ → "Aggiungi a schermata Home".
 
-## Pubblicazione su GitHub Pages (per l'installazione automatica completa)
+## Pubblicazione su GitHub Pages
 
-Se vuoi che Chrome mostri il banner automatico "Installa app" (invece del
-comando manuale), serve pubblicare i file su un sito vero (https). GitHub
-Pages lo offre gratis. Passi:
-
-1. Crea un account su [github.com](https://github.com) se non ne hai già uno.
-2. Crea un nuovo repository (es. `diritti-visita-app`), pubblico.
-3. Carica in questo repository i 5 file presenti in questa cartella:
-   - `index.html`
-   - `manifest.json`
-   - `sw.js`
-   - `icon-192.png`
-   - `icon-512.png`
-4. Vai su **Settings → Pages** del repository.
-5. In "Source" scegli il branch `main` e la cartella `/ (root)`, poi Salva.
-6. Dopo 1-2 minuti il sito sarà disponibile su:
-   `https://TUO-NOME-UTENTE.github.io/diritti-visita-app/`
-7. Apri quel link sul telefono, in Chrome. Dopo qualche secondo comparirà
-   il banner "Aggiungi Diritti Visita alla schermata Home" — conferma.
-
-Da quel momento l'app si comporta come un'app installata a tutti gli
-effetti: icona propria, si apre a schermo intero, funziona anche offline
-(il Service Worker mette in cache tutto al primo avvio).
-
-## Aggiornare l'app in futuro
-
-Se in seguito modifichi `index.html` (o te lo preparo aggiornato), basta
-ricaricare il nuovo file sullo stesso repository GitHub: il Service
-Worker rileverà la nuova versione e la applicherà al riavvio successivo
-dell'app.
+1. Crea un repository pubblico su GitHub.
+2. Carica i 7 file di questa cartella: `index.html`, `manifest.json`, `sw.js`,
+   `icon-192.png`, `icon-192-maskable.png`, `icon-512.png`, `icon-512-maskable.png`.
+3. Settings → Pages → Source: "Deploy from a branch" → Branch: `main` / `root` → Save.
+4. Attendi 1-2 minuti, poi apri l'indirizzo mostrato (es. `https://tuonome.github.io/repo/`).
+5. Apri quel link sul telefono in Chrome: dopo pochi secondi comparirà il banner
+   "Aggiungi alla schermata Home" automatico.
 
 ## Dati e backup
 
-I dati (giorni segnati, impostazioni, elenco figli) sono salvati soltanto
-nella memoria del browser del tuo telefono (localStorage) — nessun server,
-nessuna condivisione automatica con terzi. Usa il pulsante
-**"Backup dati (JSON)"** nella scheda Riepilogo annuale per esportare
-periodicamente una copia di sicurezza, specialmente prima di cambiare
-telefono o disinstallare l'app.
-
-## Struttura dei moduli generati
-
-I PDF generati dalla scheda "Genera moduli" sono gli stessi moduli
-ufficiali forniti dall'Ufficio del sostegno sociale, compilati
-automaticamente nei campi:
-
-- Funzionario incaricato, Cognome e nome, Domicilio (da Impostazioni)
-- Figlio e mese (dal calendario)
-- Giorni con pernottamento / giorno singolo (da quanto segnato nel
-  calendario di quel mese)
-
-**Restano da completare a mano**, come da prassi ufficiale: data e firma
-del richiedente, e la conferma controfirmata dall'altro genitore in fondo
-al modulo.
+I dati (giorni segnati, impostazioni, elenco figli, colori) sono salvati solo
+nella memoria del browser (localStorage) — nessun server, nessuna condivisione
+con terzi. Usa **"Backup"** nella scheda Riepilogo per esportare una copia di
+sicurezza periodicamente.
