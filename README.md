@@ -1,5 +1,7 @@
 # Calendario Diritti di Visita — v2
 
+**Aggiornamento**: logo e header ridisegnati, nomi propri rimossi dal titolo (privacy), vista combinata corretta (bug risolto), colore blu fluo al posto del viola, footer con firma DD, sicurezza rinforzata (Content-Security-Policy, escaping anti-injection, validazione backup).
+
 App per segnare, gestire e generare mensilmente i moduli ufficiali
 "Richiesta prestazione speciale per diritti di visita" (USSI/URAR, Cantone Ticino).
 
