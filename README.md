@@ -21,8 +21,9 @@ sul tuo dispositivo. Per installarla: menu Chrome ⋮ → "Aggiungi a schermata 
 ## Pubblicazione su GitHub Pages
 
 1. Crea un repository pubblico su GitHub.
-2. Carica i 7 file di questa cartella: `index.html`, `manifest.json`, `sw.js`,
-   `icon-192.png`, `icon-192-maskable.png`, `icon-512.png`, `icon-512-maskable.png`.
+2. Carica i 9 file di questa cartella: `index.html`, `app.css`, `app.js`,
+   `manifest.json`, `sw.js`, `icon-192.png`, `icon-192-maskable.png`,
+   `icon-512.png`, `icon-512-maskable.png`.
 3. Settings → Pages → Source: "Deploy from a branch" → Branch: `main` / `root` → Save.
 4. Attendi 1-2 minuti, poi apri l'indirizzo mostrato (es. `https://tuonome.github.io/repo/`).
 5. Apri quel link sul telefono in Chrome: dopo pochi secondi comparirà il banner
