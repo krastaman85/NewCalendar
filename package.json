@@ -1,0 +1,16 @@
+{
+  "name": "stages-check-analysis-proposals",
+  "version": "1.0.0",
+  "description": "**Aggiornamento**: logo e header ridisegnati, nomi propri rimossi dal titolo (privacy), vista combinata corretta (bug risolto), colore blu fluo al posto del viola, footer con firma DD, sicurezza rinforzata (Content-Security-Policy, escaping anti-injection, validazione backup).",
+  "main": "app-bootstrap.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}
