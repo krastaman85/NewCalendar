@@ -2,7 +2,7 @@
   "name": "Calendario Diritti di Visita — Kyan & Meryl",
   "short_name": "Diritti Visita",
   "description": "Segna, gestisci e genera automaticamente i moduli mensili ufficiali dei diritti di visita per Kyan (verde) e Meryl (turchese).",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "id": "diritti-visita-app",
   "display": "standalone",
