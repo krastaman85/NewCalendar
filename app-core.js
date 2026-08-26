@@ -633,6 +633,12 @@ async function fillFormPdf(child) {
   const pdfDoc = await PDFDocument.load(bytes);
   const form = pdfDoc.getForm();
 
+  // NOTA: non rimuoviamo più gli XObject immagine. Il template usato è il
+  // modulo ufficiale in bianco, che NON contiene firme scannerizzate ma solo
+  // il logo del Cantone: eliminare gli XObject cancellava anche il logo.
+  // Le firme restano comunque escluse perché i relativi campi di testo sono
+  // filtrati da isBlockedFieldName qui sotto.
+
   const isBlockedFieldName = (name) => {
     const lower = String(name || "").toLowerCase();
     return /firma|signature|timbro|stampa|data firma|firma del/.test(lower);
@@ -657,8 +663,11 @@ async function fillFormPdf(child) {
   else setIfExists("Domicilio", "");
 
   const cognomeBase = DATA.profile.richiedente.split(" ")[0] || "";
-  setIfExists("una richiesta per figlio", `${cognomeBase} ${child}`.trim());
-  ["per il mese", "Data", "data", "Data odierna", "data odierna"].forEach(name => setIfExists(name, todayString));
+  setIfExists("per figlio", `${cognomeBase} ${child}`.trim());
+  // "per il mese" = mese di riferimento del calendario (es. "Agosto 2026"),
+  // NON la data odierna. Gli altri eventuali campi data ricevono la data di oggi.
+  setIfExists("per il mese", `${MESI[curMonth]} ${curYear}`);
+  ["Data", "data", "Data odierna", "data odierna"].forEach(name => setIfExists(name, todayString));
 
   for (let d = 1; d <= 31; d++) {
     setIfExists(`Per notte con pernottamento${d}`, "");
@@ -672,6 +681,15 @@ async function fillFormPdf(child) {
   });
 
   try { form.updateFieldAppearances(); } catch(e) {}
+
+  // Alcuni visualizzatori (Anteprima di macOS, Quick Look su iPhone, alcune
+  // versioni di Adobe) ignorano gli "appearance stream" generati da pdf-lib e
+  // mostrerebbero il modulo VUOTO anche se i dati sono presenti. Impostando
+  // NeedAppearances il visualizzatore rigenera l'aspetto dai valori dei campi.
+  try {
+    form.acroForm.dict.set(PDFLib.PDFName.of("NeedAppearances"), PDFLib.PDFBool.True);
+  } catch (e) {}
+
   return await pdfDoc.save();
 }
 
