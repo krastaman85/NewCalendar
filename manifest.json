@@ -1,0 +1,37 @@
+{
+  "name": "Calendario Diritti di Visita — Figlio 1 & Figlio 2",
+  "short_name": "Diritti Visita",
+  "description": "Segna, gestisci e genera automaticamente i moduli mensili ufficiali dei diritti di visita per Figlio 1 (verde) e Figlio 2 (turchese).",
+  "start_url": "./",
+  "scope": "./",
+  "id": "diritti-visita-app",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0a0a10",
+  "theme_color": "#0a0a10",
+  "lang": "it-CH",
+  "categories": ["productivity", "utilities", "lifestyle"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Genera moduli del mese",
+      "short_name": "Genera moduli",
+      "description": "Vai direttamente alla generazione dei moduli PDF del mese corrente",
+      "url": "./index.html?tab=generate",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Riepilogo annuale",
+      "short_name": "Riepilogo",
+      "description": "Vai direttamente al riepilogo annuale",
+      "url": "./index.html?tab=summary",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
