@@ -9,9 +9,19 @@ function defaultData() {
   return {
     profile: { richiedente: "", domicilio: "", funzionario: "Persona 1" },
     children: ["Figlio 1", "Figlio 2"],
+    birthdates: {},   // { "Nome figlio": "aaaa-mm-gg" }  (ISO per <input type=date>)
     entries: {},
     comboMode: false,
   };
+}
+
+// Converte una data ISO (aaaa-mm-gg) nel formato svizzero gg.mm.aaaa usato dal
+// modulo ufficiale. Ritorna "" se il valore non è una data ISO valida.
+function isoToSwissDate(iso) {
+  if (typeof iso !== "string") return "";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  return `${m[3]}.${m[2]}.${m[1]}`;
 }
 
 let DATA = loadData();
@@ -29,6 +39,7 @@ function loadData() {
       parsed.profile.domicilio = String(parsed.profile.domicilio || "").trim();
       if (parsed.profile.domicilio.toLowerCase() === "agno") parsed.profile.domicilio = "";
     }
+    if (!parsed.birthdates || typeof parsed.birthdates !== "object") parsed.birthdates = {};
     return parsed;
   } catch (e) { return defaultData(); }
 }
@@ -175,7 +186,7 @@ function renderLegend() {
   }
 }
 
-function renderCalendar() {
+function renderCalendar(popDay) {
   renderChildSeg("childSegCal", () => renderCalendar());
   document.getElementById("comboBtn").classList.toggle("on", comboMode);
   document.getElementById("monthLabel").textContent = `${MESI[curMonth]} ${curYear}`;
@@ -232,6 +243,7 @@ function renderCalendar() {
       else if (state === "sing") { el.style.background = col.hex + "55"; el.style.borderColor = col.hex; el.style.color = "var(--text)"; }
       el.textContent = d;
     }
+    if (d === popDay) el.classList.add("daycell-pop");
     grid.appendChild(el);
   }
   renderLegend();
@@ -244,45 +256,121 @@ function cycleDay(d) {
   const next = cur === "" ? "pern" : cur === "pern" ? "sing" : "";
   if (next === "") delete entry[d]; else entry[d] = next;
   saveData();
-  renderCalendar();
+  renderCalendar(d);
+}
+
+// ── KPI a riga singola con transizioni di entrata/uscita ────────────────
+// updateStats costruisce la lista desiderata di KPI (con una CHIAVE stabile
+// per ciascuno) e la riconcilia con le card già presenti: quelle che restano
+// vengono aggiornate sul posto, quelle nuove entrano e quelle non più
+// necessarie escono, sempre con effetti fluidi e su una sola riga.
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 function updateStats() {
   const bar = document.getElementById("statsBar");
   const dim = daysInMonth(curYear, curMonth);
-  bar.innerHTML = "";
 
+  let items;
   if (comboMode) {
-    DATA.children.forEach(c => {
-      const entry = getEntry(curYear, curMonth, c);
-      const vals = Object.values(entry);
-      const tot = vals.length;
-      const pct = percentOf(tot, dim);
+    items = DATA.children.map(c => {
+      const tot = Object.values(getEntry(curYear, curMonth, c)).length;
       const col = getChildColor(c);
-      const card = document.createElement("div");
-      card.className = "statcard " + col.css;
-      card.innerHTML = `<div class="n">${tot}</div><div class="l">${escapeHtml(c)}</div><div class="pct">${pct}%</div>`;
-      bar.appendChild(card);
+      return { key: "child:" + c, cls: col.css, n: tot, l: c, pct: percentOf(tot, dim) };
     });
-    return;
+  } else {
+    const vals = Object.values(getEntry(curYear, curMonth, activeChild));
+    const pern = vals.filter(v => v === "pern").length;
+    const sing = vals.filter(v => v === "sing").length;
+    const tot = pern + sing;
+    const col = getChildColor(activeChild);
+    items = [
+      { key: "tot",  cls: col.css, n: tot,  l: "giorni",   pct: percentOf(tot, dim) },
+      { key: "pern", cls: col.css, n: pern, l: "pernott.", pct: percentOf(pern, dim) },
+      { key: "sing", cls: col.css, n: sing, l: "singoli",  pct: percentOf(sing, dim) },
+    ];
   }
+  reconcileStats(bar, items);
+}
 
-  const entry = getEntry(curYear, curMonth, activeChild);
-  const vals = Object.values(entry);
-  const pern = vals.filter(v => v==="pern").length;
-  const sing = vals.filter(v => v==="sing").length;
-  const tot = pern + sing;
-  const col = getChildColor(activeChild);
-  const items = [
-    [tot, "giorni", col.css, percentOf(tot, dim)],
-    [pern, "pernott.", col.css, percentOf(pern, dim)],
-    [sing, "singoli", col.css, percentOf(sing, dim)],
-  ];
-  items.forEach(([n, l, cls, pct]) => {
-    const card = document.createElement("div");
-    card.className = "statcard " + cls;
-    card.innerHTML = `<div class="n">${n}</div><div class="l">${l}</div><div class="pct">${pct}%</div>`;
-    bar.appendChild(card);
+function buildStatCard(it) {
+  const card = document.createElement("div");
+  card.className = "statcard " + it.cls;
+  card.dataset.key = it.key;
+  const n = document.createElement("div"); n.className = "n"; n.textContent = it.n;
+  const l = document.createElement("div"); l.className = "l"; l.textContent = it.l;
+  const p = document.createElement("div"); p.className = "pct"; p.textContent = it.pct + "%";
+  card.append(n, l, p);
+  return card;
+}
+
+function updateStatCard(el, it) {
+  el.className = "statcard " + it.cls;
+  el.dataset.key = it.key;
+  const nEl = el.querySelector(".n");
+  const changed = nEl.textContent !== String(it.n);
+  nEl.textContent = it.n;
+  el.querySelector(".l").textContent = it.l;
+  el.querySelector(".pct").textContent = it.pct + "%";
+  if (changed && !prefersReducedMotion()) {
+    el.classList.remove("stat-pulse"); void el.offsetWidth; el.classList.add("stat-pulse");
+  }
+}
+
+function enterStatCard(el) {
+  if (prefersReducedMotion()) return;
+  el.classList.add("stat-enter");
+  el.style.maxWidth = "0px";
+  el.style.flexGrow = "0";
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    el.classList.remove("stat-enter");
+    el.style.maxWidth = "280px";
+    el.style.flexGrow = "1";
+    const clear = () => { el.style.maxWidth = ""; };
+    el.addEventListener("transitionend", clear, { once: true });
+    setTimeout(clear, 500);
+  }));
+}
+
+function leaveStatCard(el) {
+  el.dataset.leaving = "1";
+  if (prefersReducedMotion()) { el.remove(); return; }
+  el.style.maxWidth = el.offsetWidth + "px";
+  void el.offsetWidth; // reflow per far partire la transizione
+  el.classList.add("stat-leave");
+  el.style.maxWidth = "0px";
+  el.style.flexGrow = "0";
+  const done = () => { if (el.parentNode) el.remove(); };
+  el.addEventListener("transitionend", done, { once: true });
+  setTimeout(done, 500);
+}
+
+function reconcileStats(bar, items) {
+  const existing = new Map();
+  bar.querySelectorAll(".statcard").forEach(el => {
+    if (el.dataset.leaving === "1") return;
+    existing.set(el.dataset.key, el);
+  });
+  const desired = new Set(items.map(it => it.key));
+
+  // Uscita
+  existing.forEach((el, key) => { if (!desired.has(key)) leaveStatCard(el); });
+
+  // Entrata/aggiornamento nell'ordine desiderato
+  let prev = null;
+  items.forEach(it => {
+    let el = existing.get(it.key);
+    if (el) {
+      updateStatCard(el, it);
+    } else {
+      el = buildStatCard(it);
+      bar.appendChild(el);
+      enterStatCard(el);
+    }
+    const anchor = prev ? prev.nextSibling : bar.firstChild;
+    if (anchor !== el) bar.insertBefore(el, anchor);
+    prev = el;
   });
 }
 
@@ -462,6 +550,18 @@ function sanitizeBackupData(parsed) {
     if (clean.length) safe.children = clean;
   }
 
+  if (parsed.birthdates && typeof parsed.birthdates === "object") {
+    const cleanBd = {};
+    for (const name of Object.keys(parsed.birthdates)) {
+      if (DANGEROUS_KEYS.has(name)) continue;
+      const v = parsed.birthdates[name];
+      if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        cleanBd[name.slice(0, 60)] = v;
+      }
+    }
+    safe.birthdates = cleanBd;
+  }
+
   if (parsed.entries && typeof parsed.entries === "object") {
     const cleanEntries = {};
     for (const monthKey of Object.keys(parsed.entries)) {
@@ -520,10 +620,20 @@ function renderChildFields() {
     row.appendChild(dot);
 
     const input = document.createElement("input");
+    input.className = "child-name";
     input.value = c;
     input.dataset.idx = String(i);
     input.setAttribute("aria-label", `Nome del figlio ${i + 1}`);
     row.appendChild(input);
+
+    const bday = document.createElement("input");
+    bday.type = "date";
+    bday.className = "child-bday";
+    bday.value = DATA.birthdates[c] || "";
+    bday.dataset.idx = String(i);
+    bday.setAttribute("aria-label", `Data di nascita del figlio ${i + 1}`);
+    bday.title = "Data di nascita";
+    row.appendChild(bday);
 
     const removeBtn = document.createElement("button");
     removeBtn.className = "rm";
@@ -547,8 +657,22 @@ function saveSettings() {
   const domicilioValue = document.getElementById("setDomicilio").value.trim();
   DATA.profile.domicilio = domicilioValue && domicilioValue.toLowerCase() !== "agno" ? domicilioValue : "";
   DATA.profile.funzionario = document.getElementById("setFunzionario").value.trim();
-  const inputs = document.querySelectorAll("#childList input");
-  DATA.children = Array.from(inputs).map(i => i.value.trim()).filter(v => v);
+
+  // Leggo nome + data di nascita riga per riga (così un rinomino conserva la data)
+  const rows = document.querySelectorAll("#childList .childlist-item");
+  const children = [];
+  const birthdates = {};
+  rows.forEach(row => {
+    const name = (row.querySelector(".child-name")?.value || "").trim();
+    if (!name) return;
+    children.push(name);
+    const bday = (row.querySelector(".child-bday")?.value || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(bday)) birthdates[name] = bday;
+  });
+  if (children.length) {
+    DATA.children = children;
+    DATA.birthdates = birthdates;
+  }
   if (!DATA.children.includes(activeChild)) activeChild = DATA.children[0];
   saveData(); closeModal("settingsModal"); renderCalendar();
   toast("Impostazioni salvate");
@@ -557,13 +681,6 @@ function saveSettings() {
 // ══════════════════════════════════════════════════════════════════════
 // GENERAZIONE MODULI PDF (pdf-lib, compila il modulo ufficiale AcroForm)
 // ══════════════════════════════════════════════════════════════════════
-function base64ToBytes(b64) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
 async function getTemplatePdfBytes() {
   const candidates = [
     "./modulo-ufficiale.pdf",
@@ -580,12 +697,7 @@ async function getTemplatePdfBytes() {
     } catch (_) {}
   }
 
-  const templateNode = document.getElementById("templateData");
-  if (templateNode && templateNode.dataset && templateNode.dataset.b64) {
-    return base64ToBytes(templateNode.dataset.b64);
-  }
-
-  throw new Error("Template PDF ufficiale non disponibile.");
+  throw new Error("Modulo ufficiale (modulo-ufficiale.pdf) non trovato: impossibile generare il PDF.");
 }
 
 function renderGenerateList() {
@@ -664,6 +776,7 @@ async function fillFormPdf(child) {
 
   const cognomeBase = DATA.profile.richiedente.split(" ")[0] || "";
   setIfExists("per figlio", `${cognomeBase} ${child}`.trim());
+  setIfExists("data di nascita", isoToSwissDate(DATA.birthdates[child]));
   // "per il mese" = mese di riferimento del calendario (es. "Agosto 2026"),
   // NON la data odierna. Gli altri eventuali campi data ricevono la data di oggi.
   setIfExists("per il mese", `${MESI[curMonth]} ${curYear}`);
