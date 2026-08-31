@@ -1,0 +1,18 @@
+# Dipendenze
+node_modules/
+
+# Artefatti di build / audit
+lighthouse-report.json
+lhr-next.json
+COMMIT_MSG.txt
+
+# File temporanei di rewrite
+.git-rewrite/
+
+# File di sistema
+.DS_Store
+Thumbs.db
+
+# File temporanei di anteprima
+_*.pdf
+_*.html

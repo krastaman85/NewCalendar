@@ -1,7 +1,7 @@
 {
-  "name": "Calendario Diritti di Visita — Figlio 1 & Figlio 2",
+  "name": "Calendario Diritti di Visita",
   "short_name": "Diritti Visita",
-  "description": "Segna, gestisci e genera automaticamente i moduli mensili ufficiali dei diritti di visita per Figlio 1 (verde) e Figlio 2 (turchese).",
+  "description": "Segna i giorni di visita e genera automaticamente i moduli mensili ufficiali (Cantone Ticino) in PDF, un modulo per ogni figlio.",
   "start_url": "./",
   "scope": "./",
   "id": "diritti-visita-app",

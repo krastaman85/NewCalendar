@@ -1,50 +1,26 @@
 (() => {
+  // La logica principale (app-core.js) è già caricata da index.html.
+  // Qui carichiamo solo il gestore eventi e il wrapper PDF. pdf-lib NON viene
+  // caricato all'avvio: lo carica app-pdf.js on-demand alla prima generazione.
   let appLoading = false;
 
-  function loadApp() {
+  function loadScript(src) {
+    return new Promise((resolve) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.defer = true;
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+  }
+
+  async function loadApp() {
     if (appLoading) return;
     appLoading = true;
-
-    const script = document.createElement('script');
-    script.src = './app.js';
-    script.defer = true;
-    script.onload = () => {
-      const eventLoader = document.createElement('script');
-      eventLoader.src = './app-events.js';
-      eventLoader.defer = true;
-      eventLoader.onload = () => {
-        const pdfLoader = document.createElement('script');
-        pdfLoader.src = './app-pdf.js';
-        pdfLoader.defer = true;
-        pdfLoader.onload = () => {
-          document.body.dataset.appLoaded = 'true';
-        };
-        pdfLoader.onerror = () => {
-          document.body.dataset.appLoaded = 'true';
-        };
-        document.head.appendChild(pdfLoader);
-      };
-      eventLoader.onerror = () => {
-        const pdfLoader = document.createElement('script');
-        pdfLoader.src = './app-pdf.js';
-        pdfLoader.defer = true;
-        pdfLoader.onload = () => {
-          document.body.dataset.appLoaded = 'true';
-        };
-        pdfLoader.onerror = () => {
-          document.body.dataset.appLoaded = 'true';
-        };
-        document.head.appendChild(pdfLoader);
-      };
-      document.head.appendChild(eventLoader);
-    };
-    script.onerror = () => {
-      const fallback = document.createElement('div');
-      fallback.textContent = 'Impossibile caricare l’applicazione. Ricarica la pagina.';
-      fallback.style.cssText = 'padding: 24px; color: #e5e7eb; font-family: sans-serif; text-align: center;';
-      document.body.prepend(fallback);
-    };
-    document.head.appendChild(script);
+    await loadScript('./app-events.js');
+    await loadScript('./app-pdf.js');
+    document.body.dataset.appLoaded = 'true';
   }
 
   function scheduleLoad() {

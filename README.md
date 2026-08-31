@@ -1,37 +1,54 @@
-# Calendario Diritti di Visita — v2
+# Calendario Diritti di Visita
 
-**Aggiornamento**: logo e header ridisegnati, nomi propri rimossi dal titolo (privacy), vista combinata corretta (bug risolto), colore blu fluo al posto del viola, footer con firma DD, sicurezza rinforzata (Content-Security-Policy, escaping anti-injection, validazione backup).
+App web (PWA) per **segnare i giorni di visita** di ogni figlio e **generare i moduli
+mensili ufficiali** "Richiesta prestazione speciale per diritti di visita"
+(USSI/URAR, Cantone Ticino) in PDF, già compilati e pronti per firma e data a mano.
 
-App per segnare, gestire e generare mensilmente i moduli ufficiali
-"Richiesta prestazione speciale per diritti di visita" (USSI/URAR, Cantone Ticino).
+Tutti i dati restano **solo sul dispositivo** (localStorage): nessun server, nessuna
+condivisione con terzi.
 
-## Novità di questa versione
+## Funzionalità
 
-- **Colori per figlio**: Figlio 1 verde, Figlio 2 turchese (estendibile ad altri figli)
-- **Vista combinata**: mostra entrambi i figli sullo stesso calendario senza cambiare scheda
-- **Navigazione a gesto**: scorri a sinistra/destra sul calendario per cambiare mese
-- **Design rinnovato**: superfici con profondità, statistiche più chiare, animazioni fluide
-- **Icone e manifest arricchiti**: icone maskable per Android, scorciatoie rapide ("Genera moduli", "Riepilogo")
+- **Calendario per figlio** con colori distinti (verde / turchese, estendibile).
+- **Vista combinata**: entrambi i figli sullo stesso calendario.
+- **Statistiche (KPI)** su una sola riga, con transizioni fluide quando cambiano.
+- **Data di nascita per figlio**: inserita nelle Impostazioni, viene compilata
+  automaticamente nel modulo (campo "data di nascita").
+- **Generazione PDF** del modulo ufficiale (via `pdf-lib`, caricato solo al bisogno).
+- **Backup / ripristino** dei dati in JSON, con validazione anti-manomissione.
+- **PWA installabile** e funzionante offline (service worker).
+- **Navigazione a gesto** (swipe) per cambiare mese; design animato e responsivo.
 
-## Uso rapido (senza pubblicare nulla)
+## Struttura dei file
 
-Apri **index.html** direttamente sul telefono (in Chrome). Tutti i dati restano
-sul tuo dispositivo. Per installarla: menu Chrome ⋮ → "Aggiungi a schermata Home".
+| File | Ruolo |
+|------|-------|
+| `index.html` | Struttura della pagina (markup) |
+| `app.css` | Stili, animazioni, responsività |
+| `app-core.js` | Logica principale (calendario, dati, PDF) |
+| `app-events.js` | Delega degli eventi dei pulsanti |
+| `app-bootstrap.js` | Caricamento moduli non critici |
+| `app-pdf.js` | Caricamento on-demand di `pdf-lib` |
+| `pdf-lib.min.js` | Libreria PDF (usata solo alla generazione) |
+| `modulo-ufficiale.pdf` | Modulo ufficiale in bianco (AcroForm compilabile) |
+| `sw.js` | Service worker (cache offline) |
+| `manifest.json`, `icon-*.png` | Metadati e icone PWA |
+
+> `node_modules/` e gli artefatti di audit (`lighthouse-report.json`, `lhr-next.json`)
+> non fanno parte dell'app: sono ignorati da git e non vanno pubblicati.
+
+## Uso rapido
+
+Apri `index.html` sul telefono (Chrome). Per installarla: menu ⋮ → "Aggiungi a
+schermata Home".
 
 ## Pubblicazione su GitHub Pages
 
-1. Crea un repository pubblico su GitHub.
-2. Carica i 9 file di questa cartella: `index.html`, `app.css`, `app.js`,
-   `manifest.json`, `sw.js`, `icon-192.png`, `icon-192-maskable.png`,
-   `icon-512.png`, `icon-512-maskable.png`.
-3. Settings → Pages → Source: "Deploy from a branch" → Branch: `main` / `root` → Save.
-4. Attendi 1-2 minuti, poi apri l'indirizzo mostrato (es. `https://tuonome.github.io/repo/`).
-5. Apri quel link sul telefono in Chrome: dopo pochi secondi comparirà il banner
-   "Aggiungi alla schermata Home" automatico.
+1. Carica i file dell'app (tutti tranne `node_modules/` e i report di audit).
+2. Settings → Pages → Source: "Deploy from a branch" → `main` / `root` → Save.
+3. Apri l'indirizzo mostrato (es. `https://tuonome.github.io/repo/`).
 
 ## Dati e backup
 
-I dati (giorni segnati, impostazioni, elenco figli, colori) sono salvati solo
-nella memoria del browser (localStorage) — nessun server, nessuna condivisione
-con terzi. Usa **"Backup"** nella scheda Riepilogo per esportare una copia di
-sicurezza periodicamente.
+I dati sono salvati solo nel browser (localStorage). Usa **"Backup"** nella scheda
+Riepilogo per esportare periodicamente una copia di sicurezza.

@@ -1,8 +1,0 @@
-Usa modulo PDF ufficiale nativo e corregge generazione moduli
-
-- Estrae il modulo ufficiale embedded (base64 in index.html) in modulo-ufficiale.pdf
-- getTemplatePdfBytes ora preferisce l'asset ./modulo-ufficiale.pdf e usa il fallback embedded solo se necessario
-- fillFormPdf mantiene il blocco sui campi firma/timbro e normalizza il domicilio (rimuove "Comune")
-- Test locale: verifica caricamento del PDF ufficiale e salvataggio di verifica (tmp-verify.pdf rimosso)
-
-Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

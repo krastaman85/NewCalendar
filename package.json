@@ -1,7 +1,7 @@
 {
-  "name": "stages-check-analysis-proposals",
+  "name": "calendario-diritti-di-visita",
   "version": "1.0.0",
-  "description": "**Aggiornamento**: logo e header ridisegnati, nomi propri rimossi dal titolo (privacy), vista combinata corretta (bug risolto), colore blu fluo al posto del viola, footer con firma DD, sicurezza rinforzata (Content-Security-Policy, escaping anti-injection, validazione backup).",
+  "description": "PWA per segnare i giorni di visita e generare i moduli mensili ufficiali (Cantone Ticino) dei diritti di visita in PDF.",
   "main": "app-bootstrap.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
