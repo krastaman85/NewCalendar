@@ -37,7 +37,6 @@ function loadData() {
     const parsed = Object.assign(defaultData(), JSON.parse(raw));
     if (parsed.profile && typeof parsed.profile === "object") {
       parsed.profile.domicilio = String(parsed.profile.domicilio || "").trim();
-      if (parsed.profile.domicilio.toLowerCase() === "agno") parsed.profile.domicilio = "";
     }
     if (!parsed.birthdates || typeof parsed.birthdates !== "object") parsed.birthdates = {};
     return parsed;
@@ -257,6 +256,7 @@ function cycleDay(d) {
   if (next === "") delete entry[d]; else entry[d] = next;
   saveData();
   renderCalendar(d);
+  invalidateGenerated();
 }
 
 // ── KPI a riga singola con transizioni di entrata/uscita ────────────────
@@ -379,7 +379,7 @@ function changeMonth(delta) {
   if (curMonth > 11) { curMonth = 0; curYear++; }
   if (curMonth < 0) { curMonth = 11; curYear--; }
   renderCalendar();
-  if (document.getElementById("panel-generate").classList.contains("active")) renderGenerateList();
+  invalidateGenerated();
 }
 
 // ── Navigazione a gesto (swipe orizzontale sul calendario) ──────────────
@@ -408,7 +408,7 @@ function copyFromPreviousMonth() {
   if (!DATA.entries[prevKey] || !DATA.entries[prevKey][activeChild]) { toast("Nessun dato nel mese precedente"); return; }
   if (!DATA.entries[curKey]) DATA.entries[curKey] = {};
   DATA.entries[curKey][activeChild] = JSON.parse(JSON.stringify(DATA.entries[prevKey][activeChild]));
-  saveData(); renderCalendar();
+  saveData(); renderCalendar(); invalidateGenerated();
   toast("Copiato dal mese precedente");
 }
 
@@ -416,7 +416,7 @@ function clearMonth() {
   if (!confirm(`Svuotare tutti i giorni di ${activeChild} per ${MESI[curMonth]} ${curYear}?`)) return;
   const key = monthKey(curYear, curMonth);
   if (DATA.entries[key]) delete DATA.entries[key][activeChild];
-  saveData(); renderCalendar();
+  saveData(); renderCalendar(); invalidateGenerated();
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -509,6 +509,7 @@ if (importInput) {
         saveData();
         activeChild = DATA.children[0] || "";
         renderCalendar();
+        invalidateGenerated();
         updateImportStatus("");
         toast("Backup ripristinato");
       } catch (err) {
@@ -654,8 +655,7 @@ function removeChildField(i) {
 }
 function saveSettings() {
   DATA.profile.richiedente = document.getElementById("setRichiedente").value.trim();
-  const domicilioValue = document.getElementById("setDomicilio").value.trim();
-  DATA.profile.domicilio = domicilioValue && domicilioValue.toLowerCase() !== "agno" ? domicilioValue : "";
+  DATA.profile.domicilio = document.getElementById("setDomicilio").value.trim();
   DATA.profile.funzionario = document.getElementById("setFunzionario").value.trim();
 
   // Leggo nome + data di nascita riga per riga (così un rinomino conserva la data)
@@ -674,7 +674,7 @@ function saveSettings() {
     DATA.birthdates = birthdates;
   }
   if (!DATA.children.includes(activeChild)) activeChild = DATA.children[0];
-  saveData(); closeModal("settingsModal"); renderCalendar();
+  saveData(); closeModal("settingsModal"); renderCalendar(); invalidateGenerated();
   toast("Impostazioni salvate");
 }
 
@@ -732,11 +732,57 @@ function renderGenerateList() {
 
     const btn = document.createElement("button");
     btn.className = col.css;
-    btn.textContent = "Genera";
+    btn.textContent = generatedPdfs[child] ? "Rigenera" : "Genera";
     btn.onclick = () => generateSingleForm(child);
     row.appendChild(btn);
-    list.appendChild(row);
+
+    const item = document.createElement("div");
+    item.className = "genitem";
+    item.appendChild(row);
+    item.appendChild(buildShareActions(child));
+    list.appendChild(item);
   });
+}
+
+// Rileva se il dispositivo può condividere FILE tramite il foglio di condivisione
+// nativo (WhatsApp, Email, Salva su file, ecc.). Su desktop spesso non è supportato.
+function canShareFiles() {
+  try {
+    if (!navigator.canShare) return false;
+    const probe = new File([new Blob([""], { type: "application/pdf" })], "x.pdf", { type: "application/pdf" });
+    return navigator.canShare({ files: [probe] });
+  } catch (e) { return false; }
+}
+
+// Barra di azioni (Condividi / Scarica / Apri) mostrata dopo la generazione.
+function buildShareActions(child) {
+  const box = document.createElement("div");
+  box.className = "genactions";
+  if (!generatedPdfs[child]) return box;         // nascosta finché non si genera
+  box.classList.add("show");
+
+  const mk = (label, cls, handler) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sharebtn" + (cls ? " " + cls : "");
+    b.textContent = label;
+    b.onclick = handler;
+    return b;
+  };
+
+  if (canShareFiles()) {
+    box.appendChild(mk("📤 Condividi / Invia", "primary", () => sharePdf([generatedPdfs[child]])));
+  }
+  box.appendChild(mk("⬇️ Scarica", "", () => { const g = generatedPdfs[child]; downloadPdf(g.bytes, g.filename); }));
+  box.appendChild(mk("🔎 Apri / Stampa", "", () => openPdf(generatedPdfs[child].bytes)));
+
+  if (canShareFiles()) {
+    const note = document.createElement("div");
+    note.className = "genactions-note";
+    note.textContent = "Condividi apre WhatsApp, Email, Salva su file e altro.";
+    box.appendChild(note);
+  }
+  return box;
 }
 
 async function fillFormPdf(child) {
@@ -765,14 +811,11 @@ async function fillFormPdf(child) {
     } catch (e) {}
   };
 
-  const domicileValue = (DATA.profile.domicilio || "").trim();
-  const normalizedDomicilio = domicileValue && domicileValue.toLowerCase() !== "agno" ? domicileValue : "";
   const todayString = formatItalianDate(new Date());
 
   setIfExists("Funzionario incaricato", DATA.profile.funzionario);
   setIfExists("Cognome e nome", DATA.profile.richiedente);
-  if (normalizedDomicilio) setIfExists("Domicilio", normalizedDomicilio);
-  else setIfExists("Domicilio", "");
+  setIfExists("Domicilio", (DATA.profile.domicilio || "").trim());
 
   const cognomeBase = DATA.profile.richiedente.split(" ")[0] || "";
   setIfExists("per figlio", `${cognomeBase} ${child}`.trim());
@@ -811,41 +854,97 @@ function pdfFilename(child) {
   return `diritti_di_visita_${mese}_${curYear}_${child}.pdf`;
 }
 
+// PDF generati nella sessione corrente: child -> { bytes, filename }.
+// Restano disponibili per essere salvati/inviati in più modi finché i dati
+// del mese non cambiano (allora vengono invalidati).
+const generatedPdfs = {};
+
+function pdfBlob(bytes) { return new Blob([bytes], { type: "application/pdf" }); }
+
+function downloadPdf(bytes, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(pdfBlob(bytes));
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+  toast("PDF scaricato");
+}
+
+function openPdf(bytes) {
+  const url = URL.createObjectURL(pdfBlob(bytes));
+  const w = window.open(url, "_blank");
+  if (!w) toast("Consenti i popup per aprire il PDF");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+// Condivisione tramite foglio nativo (WhatsApp, Email, Messaggi, Salva su file…).
+// items: [{ bytes, filename }]. Fallback al download se non supportato.
+async function sharePdf(items) {
+  const files = items.map(it => new File([pdfBlob(it.bytes)], it.filename, { type: "application/pdf" }));
+  try {
+    if (navigator.canShare && navigator.canShare({ files })) {
+      await navigator.share({ files, title: files.length > 1 ? "Moduli diritti di visita" : files[0].name });
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return;    // condivisione annullata dall'utente
+  }
+  items.forEach(it => downloadPdf(it.bytes, it.filename));
+  toast("Condivisione non disponibile: file scaricato");
+}
+
+// Barra "condividi/scarica tutti" quando ci sono ≥2 moduli generati.
+function updateGenAllActions() {
+  const box = document.getElementById("genAllActions");
+  if (!box) return;
+  box.innerHTML = "";
+  const ready = DATA.children.filter(c => generatedPdfs[c]).map(c => generatedPdfs[c]);
+  if (ready.length < 2) { box.classList.remove("show"); return; }
+  box.classList.add("show");
+  const mk = (label, cls, h) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "sharebtn" + (cls ? " " + cls : ""); b.textContent = label; b.onclick = h;
+    return b;
+  };
+  if (canShareFiles()) box.appendChild(mk("📤 Condividi tutti", "primary", () => sharePdf(ready)));
+  box.appendChild(mk("⬇️ Scarica tutti", "", () => ready.forEach(g => downloadPdf(g.bytes, g.filename))));
+}
+
+// I PDF generati non riflettono più i dati se il mese/i giorni cambiano:
+// li invalidiamo e nascondiamo le azioni.
+function invalidateGenerated() {
+  for (const k in generatedPdfs) delete generatedPdfs[k];
+  const box = document.getElementById("genAllActions");
+  if (box) { box.innerHTML = ""; box.classList.remove("show"); }
+  const status = document.getElementById("genStatus");
+  if (status) status.textContent = "";
+  const panel = document.getElementById("panel-generate");
+  if (panel && panel.classList.contains("active")) renderGenerateList();
+}
+
 async function generateSingleForm(child) {
-  document.getElementById("genStatus").textContent = `Generazione modulo ${child}…`;
+  const status = document.getElementById("genStatus");
+  status.textContent = `Generazione modulo ${child}…`;
   try {
     const bytes = await fillFormPdf(child);
-    downloadOrSharePdf(bytes, pdfFilename(child));
-    document.getElementById("genStatus").textContent = `✓ Modulo ${child} generato.`;
-  } catch (e) { document.getElementById("genStatus").textContent = "Errore: " + e.message; }
+    generatedPdfs[child] = { bytes, filename: pdfFilename(child) };
+    renderGenerateList();
+    updateGenAllActions();
+    status.textContent = `✓ Modulo ${child} pronto: scegli come salvarlo o inviarlo.`;
+  } catch (e) { status.textContent = "Errore: " + e.message; }
 }
 
 async function generateAllForms() {
-  document.getElementById("genStatus").textContent = "Generazione in corso…";
-  for (const child of DATA.children) {
-    try {
-      const bytes = await fillFormPdf(child);
-      downloadOrSharePdf(bytes, pdfFilename(child));
-    } catch (e) {
-      document.getElementById("genStatus").textContent = "Errore su " + child + ": " + e.message;
-      return;
+  const status = document.getElementById("genStatus");
+  status.textContent = "Generazione in corso…";
+  try {
+    for (const child of DATA.children) {
+      generatedPdfs[child] = { bytes: await fillFormPdf(child), filename: pdfFilename(child) };
     }
-  }
-  document.getElementById("genStatus").textContent = `✓ ${DATA.children.length} moduli generati per ${MESI[curMonth]} ${curYear}.`;
-}
-
-async function downloadOrSharePdf(bytes, filename) {
-  const blob = new Blob([bytes], { type: "application/pdf" });
-  if (navigator.canShare) {
-    const file = new File([blob], filename, { type: "application/pdf" });
-    if (navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: filename }); return; } catch (e) {}
-    }
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
+  } catch (e) { status.textContent = "Errore: " + e.message; return; }
+  renderGenerateList();
+  updateGenAllActions();
+  status.textContent = `✓ ${DATA.children.length} moduli pronti per ${MESI[curMonth]} ${curYear}: salvali o inviali qui sotto.`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
