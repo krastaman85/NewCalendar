@@ -75,8 +75,9 @@ function getEntry(y, m, child) {
 const EXTRA_PALETTE = ["#2f7fff", "#f9a825", "#ff5c7a", "#a78bfa", "#e879f9"];
 function getChildColor(name) {
   const n = (name || "").trim().toLowerCase();
-  if (n === "child-first") return { solid: "var(--child-first)", css: "c-child-first", hex: "#22c55e", deep: "var(--child-first-deep)" };
-  if (n === "child-second") return { solid: "var(--child-second)", css: "c-child-second", hex: "#14b8a6", deep: "var(--child-second-deep)" };
+  const childIndex = DATA.children.indexOf(name);
+  if (childIndex === 0) return { solid: "var(--child-first)", css: "c-first", hex: "#22c55e", deep: "var(--child-first-deep)" };
+  if (childIndex === 1) return { solid: "var(--child-second)", css: "c-second", hex: "#14b8a6", deep: "var(--child-second-deep)" };
   // colore stabile per nome (hash semplice) tra gli altri figli eventuali
   let hash = 0;
   for (let i = 0; i < n.length; i++) hash = (hash * 31 + n.charCodeAt(i)) >>> 0;
@@ -237,7 +238,7 @@ function renderCalendar(popDay) {
       const state = entry[d] || "";
       const col = getChildColor(activeChild);
       el.className = "daycell" + (state ? " " + state : "") + (isToday ? " today" : "");
-      el.dataset.child = activeChild.toLowerCase() === "child-second" ? "child-second" : "";
+      el.dataset.child = DATA.children.indexOf(activeChild) === 1 ? "second" : "";
       if (state === "pern") { el.style.background = col.hex; el.style.borderColor = col.hex; el.style.color = col.deep; }
       else if (state === "sing") { el.style.background = col.hex + "55"; el.style.borderColor = col.hex; el.style.color = "var(--text)"; }
       el.textContent = d;
