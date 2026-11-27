@@ -110,13 +110,13 @@
   // ── coda delle modifiche ──────────────────────────────────────────────
   function loadQueue() {
     const q = readJSON(QUEUE_KEY, null);
-    if (!q || typeof q !== "object" || !q.days || typeof q.days !== "object") return { days: {}, settings: 0 };
-    return { days: q.days, settings: Number(q.settings) || 0 };
+    if (!q || typeof q !== "object" || !q.days || typeof q.days !== "object") return { days: {}, notes: {}, settings: 0 };
+    return { days: q.days, notes: (q.notes && typeof q.notes === "object") ? q.notes : {}, settings: Number(q.settings) || 0 };
   }
   let queue = loadQueue();
   let ver = Date.now();
   function saveQueue() { writeJSON(QUEUE_KEY, queue); }
-  function pendingCount() { return Object.keys(queue.days).length + (queue.settings ? 1 : 0); }
+  function pendingCount() { return Object.keys(queue.days).length + Object.keys(queue.notes).length + (queue.settings ? 1 : 0); }
 
   let state = readJSON(STATE_KEY, {});
   if (!state || typeof state !== "object") state = {};
@@ -143,6 +143,15 @@
     for (const k of a.keys()) if (!b.has(k)) { queue.days[k] = { kind: null, v: ++ver }; n++; }
     if (n) { saveQueue(); scheduleSync(700); }
   }
+  function notesChanged(before) {
+    if (!linked()) return;
+    const a = before || {};
+    const b = DATA.notes || {};
+    let n = 0;
+    for (const k of Object.keys(b)) if (a[k] !== b[k]) { queue.notes[k] = { text: b[k], v: ++ver }; n++; }
+    for (const k of Object.keys(a)) if (!(k in b)) { queue.notes[k] = { text: null, v: ++ver }; n++; }
+    if (n) { saveQueue(); scheduleSync(700); }
+  }
   function settingsChanged() {
     if (!linked()) return;
     queue.settings = ++ver;
@@ -165,9 +174,19 @@
     }
     return rows;
   }
+  async function fetchAllNotes() {
+    const rows = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await sb.from("day_notes").select("day,note").order("day").range(from, from + 999);
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < 1000) break;
+    }
+    return rows;
+  }
   async function fetchSettings() {
     const { data, error } = await sb.from("app_settings")
-      .select("profile,children,birthdates,updated_at")
+      .select("profile,children,birthdates,schedule,updated_at")
       .maybeSingle();
     if (error) throw error;
     return data;
@@ -179,6 +198,7 @@
       profile: DATA.profile || {},
       children: DATA.children || [],
       birthdates: DATA.birthdates || {},
+      schedule: DATA.schedule || {},
     }, { onConflict: "user_id" });
     if (error) throw error;
     if (queue.settings === v) { queue.settings = 0; saveQueue(); }
@@ -190,8 +210,33 @@
     }
     saveQueue();
   }
+  async function flushNotes() {
+    const ups = [], dels = [];
+    for (const [iso, op] of Object.entries(queue.notes)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) { delete queue.notes[iso]; continue; }
+      if (op.text) ups.push({ iso, v: op.v, row: { user_id: user.id, day: iso, note: String(op.text).slice(0, 500) } });
+      else dels.push({ iso, v: op.v });
+    }
+    const done = (part) => {
+      for (const p of part) { const cur = queue.notes[p.iso]; if (cur && cur.v === p.v) delete queue.notes[p.iso]; }
+      saveQueue();
+    };
+    for (let i = 0; i < ups.length; i += CHUNK) {
+      const part = ups.slice(i, i + CHUNK);
+      const { error } = await sb.from("day_notes").upsert(part.map(p => p.row), { onConflict: "user_id,day" });
+      if (error) throw error;
+      done(part);
+    }
+    for (let i = 0; i < dels.length; i += CHUNK) {
+      const part = dels.slice(i, i + CHUNK);
+      const { error } = await sb.from("day_notes").delete().in("day", part.map(p => p.iso));
+      if (error) throw error;
+      done(part);
+    }
+  }
   async function flush() {
     if (queue.settings) await uploadSettings();
+    await flushNotes();
     const ups = [];
     const dels = new Map();
     for (const [key, op] of Object.entries(queue.days)) {
@@ -230,6 +275,7 @@
     DATA.profile = safe.profile;
     if (Array.isArray(s.children) && s.children.length) DATA.children = safe.children;
     DATA.birthdates = safe.birthdates;
+    if (s.schedule && Array.isArray(s.schedule.A) && typeof sanitizeSchedule === "function") DATA.schedule = sanitizeSchedule(s.schedule);
     return before !== JSON.stringify([DATA.profile, DATA.children, DATA.birthdates]);
   }
 
@@ -244,11 +290,22 @@
     }
     const changedEntries = signature(entries) !== signature(DATA.entries);
     if (changedEntries) DATA.entries = entries;
+    const noteRows = await fetchAllNotes();
+    const notes = {};
+    for (const r of noteRows) notes[r.day] = r.note;
+    for (const [iso, op] of Object.entries(queue.notes)) { if (op.text) notes[iso] = op.text; else delete notes[iso]; }
+    const sigN = (o) => JSON.stringify(Object.keys(o || {}).sort().map(k => [k, o[k]]));
+    const changedNotes = sigN(notes) !== sigN(DATA.notes);
+    if (changedNotes) DATA.notes = notes;
     const changedSettings = !queue.settings && applyServerSettings(settings);
     if (!settings && !queue.settings) { queue.settings = ++ver; saveQueue(); }
-    if (changedEntries || changedSettings) {
+    if (changedEntries || changedSettings || changedNotes) {
       saveData();
       rerenderApp();
+    }
+    if (changedSettings) {
+      const m = $("settingsModal");
+      if (m && m.classList.contains("show") && typeof refreshSettingsForm === "function") refreshSettingsForm();
     }
   }
 
@@ -263,6 +320,10 @@
     for (const [k, kind] of flatten(DATA.entries)) {
       if (!server.has(k)) { queue.days[k] = { kind, v: ++ver }; uploaded++; }
     }
+    const serverNotes = new Set((await fetchAllNotes()).map(r => r.day));
+    for (const [iso, text] of Object.entries(DATA.notes || {})) {
+      if (!serverNotes.has(iso)) { queue.notes[iso] = { text, v: ++ver }; uploaded++; }
+    }
     const s = await fetchSettings();
     if (!s) queue.settings = ++ver;
     saveQueue();
@@ -270,7 +331,7 @@
     saveState();
     await flush();
     await pull();
-    if (uploaded) toast(`☁️ ${uploaded} giorni caricati nel cloud`);
+    if (uploaded) toast(`☁️ ${uploaded} elementi caricati nel cloud`);
   }
 
   function rerenderApp() {
@@ -410,6 +471,32 @@
     if (data && data.session) setMsg("Account creato e collegato. Sincronizzo…");
     else setMsg("Account creato. Deve essere attivato: conferma dal link nell'e-mail ricevuta oppure chiedi a Claude di attivarlo, poi premi «Accedi».");
   }
+  async function doForgot() {
+    const email = ($("syncEmail").value || "").trim();
+    if (!email) { setMsg("Scrivi la tua e-mail nel campo qui sopra, poi premi di nuovo «Password dimenticata?».", true); return; }
+    setMsg("Invio dell'e-mail in corso…");
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: CFG.appUrl });
+    if (error) { setMsg(errMsg(error), true); return; }
+    setMsg("Se l'indirizzo è corretto riceverai un'e-mail: apri il link su questo dispositivo e scegli la nuova password.");
+  }
+  async function doResetSave() {
+    const pw = $("newPassword").value || "";
+    if (pw.length < 12) { setMsg("La nuova password deve avere almeno 12 caratteri.", true); return; }
+    const { data, error } = await sb.auth.updateUser({ password: pw });
+    if (error) { setMsg(errMsg(error), true); return; }
+    await storeCredential((data && data.user && data.user.email) || (user && user.email) || "", pw);
+    $("newPassword").value = "";
+    $("pwResetBox").hidden = true;
+    setMsg("Password aggiornata. Sei collegato.");
+    scheduleSync(100);
+  }
+  function showPasswordReset() {
+    openModal("settingsModal");
+    const box = $("pwResetBox");
+    if (box) { box.hidden = false; setTimeout(() => { box.scrollIntoView({ block: "center" }); $("newPassword").focus(); }, 80); }
+    setMsg("Collegamento dall'e-mail riconosciuto: scegli la nuova password.");
+  }
+
   async function doSignOut() {
     const n = pendingCount();
     const msg = n
@@ -417,7 +504,7 @@
       : "Scollegare questo dispositivo dal cloud? I dati restano salvati sul dispositivo.";
     if (!confirm(msg)) return;
     await sb.auth.signOut();
-    queue = { days: {}, settings: 0 }; saveQueue();
+    queue = { days: {}, notes: {}, settings: 0 }; saveQueue();
     state = {}; saveState();
     setMsg("Dispositivo scollegato.");
     setState("off");
@@ -428,7 +515,7 @@
     const list = $("historyList");
     list.textContent = "Caricamento…";
     const { data, error } = await sb.from("visits_audit")
-      .select("child,day,old_kind,new_kind,changed_at,actor")
+      .select("entity,child,day,old_kind,new_kind,old_note,new_note,changed_at,actor")
       .order("changed_at", { ascending: false })
       .limit(100);
     list.textContent = "";
@@ -436,7 +523,10 @@
     if (!data.length) { list.textContent = "Nessuna modifica registrata."; return; }
     data.forEach(r => {
       const row = el("div", "hist-row");
-      row.appendChild(el("div", "hist-main", `${r.child} · ${swissDate(r.day)}: ${kindLabel(r.old_kind)} → ${kindLabel(r.new_kind)}`));
+      const q = (t) => t ? `«${t.length > 60 ? t.slice(0, 60) + "…" : t}»` : "nessuna";
+      row.appendChild(el("div", "hist-main", r.entity === "nota"
+        ? `Nota del ${swissDate(r.day)}: ${q(r.old_note)} → ${q(r.new_note)}`
+        : `${r.child} · ${swissDate(r.day)}: ${kindLabel(r.old_kind)} → ${kindLabel(r.new_kind)}`));
       row.appendChild(el("div", "hist-meta", `${swissDateTime(r.changed_at)} · ${r.actor}`));
       list.appendChild(row);
     });
@@ -519,6 +609,8 @@
     });
     on("syncSignUp", doSignUp);
     on("syncSignOut", doSignOut);
+    on("syncForgot", doForgot);
+    on("pwResetSave", doResetSave);
     on("syncNow", () => { setMsg(""); sync(); });
     on("historyBtn", () => { const box = $("historyBox"); box.hidden = !box.hidden; if (!box.hidden) showHistory(); });
     on("shareCreate", createShareLink);
@@ -563,6 +655,10 @@
     });
     DATA.children = names.length ? names : ["—"];
     DATA.entries = entries;
+    DATA.notes = {};
+    (Array.isArray(data.notes) ? data.notes : []).forEach(n => {
+      if (n && typeof n.day === "string" && typeof n.note === "string") DATA.notes[n.day.slice(0, 10)] = n.note.slice(0, 500);
+    });
     activeChild = DATA.children[0];
     if (data.date_to) {
       const end = new Date(data.date_to + "T12:00:00");
@@ -582,10 +678,16 @@
     if (typeof READONLY_TOKEN !== "undefined" && READONLY_TOKEN) { startReadonly(READONLY_TOKEN); return; }
     wirePanel();
     if (!CFG || !window.supabase) { updateBadge(); renderSyncPanel(); return; }
+    const fromEmail = /[#&](access_token|error_description)=/.test(location.hash);
+    const emailError = fromEmail && (location.hash.match(/error_description=([^&]+)/) || [])[1];
     sb = window.supabase.createClient(CFG.url, CFG.key, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "diritti_visita_auth" },
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: fromEmail, flowType: "implicit", storageKey: "diritti_visita_auth" },
     });
-    sb.auth.onAuthStateChange((_event, session) => {
+    if (fromEmail) {
+      if (emailError) setTimeout(() => { openModal("settingsModal"); setMsg("Link dell'e-mail non valido o scaduto: " + decodeURIComponent(emailError.replace(/\+/g, " ")), true); }, 300);
+    }
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setTimeout(showPasswordReset, 200);
       user = session ? session.user : null;
       updateBadge(); renderSyncPanel();
       if (user) scheduleSync(50);
@@ -594,6 +696,8 @@
       const { data } = await sb.auth.getSession();
       user = data && data.session ? data.session.user : null;
     } catch (_) { user = null; }
+    // la libreria ha letto i token dell'e-mail: si tolgono dall'indirizzo e dalla cronologia
+    if (fromEmail) { try { history.replaceState(history.state, "", location.pathname + location.search); } catch (_) {} }
     updateBadge(); renderSyncPanel();
     if (user) scheduleSync(0);
 
@@ -604,7 +708,7 @@
   }
 
   window.CloudSync = Object.freeze({
-    dayChanged, entriesChanged, settingsChanged,
+    dayChanged, entriesChanged, notesChanged, settingsChanged,
     syncNow: () => sync(),
     status: () => ({ state: syncState, pending: pendingCount(), user: user ? user.email : null, lastSync: state.lastSync || null, error: lastError }),
   });

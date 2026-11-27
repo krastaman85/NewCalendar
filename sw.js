@@ -1,6 +1,6 @@
 // Service worker con cache shell dell'app e fallback offline.
-const APP_CACHE = "diritti-visita-app-shell-v10";
-const RUNTIME_CACHE = "diritti-visita-runtime-v10";
+const APP_CACHE = "diritti-visita-app-shell-v12";
+const RUNTIME_CACHE = "diritti-visita-runtime-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const APP_SHELL = [
   "./cloud-config.js",
   "./supabase.min.js",
   "./app-core.js",
+  "./app-extra.js",
   "./app-sync.js",
   "./app-bootstrap.js",
   "./app-events.js",

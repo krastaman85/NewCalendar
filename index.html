@@ -47,10 +47,19 @@
 
   <div class="content">
 
+    <div class="reminder" id="reminderBar" role="status" hidden>
+      <span id="reminderText"></span>
+      <div class="reminder-actions">
+        <button class="btn primary" type="button" id="reminderGo">📄 Vai ai moduli</button>
+        <button class="btn ghost" type="button" id="reminderDone">Fatto</button>
+      </div>
+    </div>
+
     <!-- ═══════════════ CALENDARIO ═══════════════ -->
     <div class="panel active" id="panel-calendar">
       <div class="childseg" id="childSegCal"></div>
       <div class="viewtoggle">
+        <button id="notesBtn" type="button" aria-pressed="false" aria-label="Modalità note: tocca un giorno per scrivere una nota">✎ Note</button>
         <button id="todayBtn" type="button" aria-label="Torna al mese corrente">📍 Oggi</button>
         <button id="comboBtn" type="button" aria-label="Attiva o disattiva vista combinata" data-action="toggle-combo">👥 Vista combinata</button>
       </div>
@@ -64,11 +73,17 @@
       <div class="calgrid" id="calGrid"></div>
 
       <div class="legend" id="legendArea"></div>
-      <div class="hint">Tocca un giorno: vuoto → pernottamento → singolo → vuoto. Scorri a sinistra/destra (o usa ← →) per cambiare mese.</div>
+      <div class="hint">Tocca un giorno: vuoto → pernottamento → singolo → vuoto. Tieni premuto per una nota. Scorri a sinistra/destra (o usa ← →) per cambiare mese.</div>
 
       <div class="statsbar" id="statsBar"></div>
 
+      <section class="notes-section" id="notesSection" aria-labelledby="notesTitle" hidden>
+        <h4 id="notesTitle">✎ Note del mese</h4>
+        <div class="notes-list" id="notesList"></div>
+      </section>
+
       <div class="btnrow">
+        <button class="btn" type="button" id="scheduleApply" aria-label="Completa i giorni vuoti del mese con lo schema concordato">📋 Applica schema</button>
         <button class="btn ghost" type="button" aria-label="Copia i dati del mese precedente" data-action="copy-previous-month">↺ Copia mese prec.</button>
         <button class="btn ghost" type="button" aria-label="Svuota il mese corrente" data-action="clear-month">✕ Svuota mese</button>
       </div>
@@ -85,6 +100,7 @@
       <table class="yeartable" id="yearTable"></table>
       <div class="btnrow">
         <button class="btn primary" type="button" aria-label="Stampa il riepilogo annuale" data-action="print-year-summary">🖨️ Stampa</button>
+        <button class="btn" type="button" id="reportBtn" aria-label="Prospetto completo con dettaglio dei giorni e note, stampabile o salvabile in PDF">🧾 Prospetto</button>
         <button class="btn" type="button" aria-label="Esporta backup" data-action="export-backup">↓ Backup</button>
         <button class="btn" type="button" aria-label="Ripristina da backup" data-action="import-backup">↑ Ripristina</button>
         <label class="btn file-picker" for="importInput" aria-label="Carica backup">📁 Carica backup</label>
@@ -134,6 +150,11 @@
         <div class="childlist" id="childList"></div>
         <button class="btn ghost full-width" type="button" aria-label="Aggiungi un figlio" data-action="add-child">+ Aggiungi figlio</button>
       </div>
+      <div class="field"><label>Schema ricorrente concordato</label>
+        <div class="hint sched-hint">Tocca un giorno: vuoto → pernottamento → singolo. Usato da «📋 Applica schema», che completa solo i giorni ancora vuoti.</div>
+        <div id="scheduleEditor" class="sched-editor"></div>
+        <div class="field sched-ref"><label for="scheduleRef">Una settimana A inizia il (lunedì)</label><input id="scheduleRef" type="date"></div>
+      </div>
       <div class="btnrow">
         <button class="btn primary" type="button" aria-label="Salva impostazioni" data-action="save-settings">Salva</button>
         <button class="btn ghost" type="button" aria-label="Chiudi impostazioni" data-action="close-settings">Chiudi</button>
@@ -156,7 +177,14 @@
             <button class="btn primary" type="submit" id="syncSignIn">Accedi</button>
             <button class="btn ghost" type="button" id="syncSignUp">Crea account (solo la prima volta)</button>
           </div>
+          <button class="linkbtn" type="button" id="syncForgot">Password dimenticata?</button>
         </form>
+
+        <div id="pwResetBox" class="sync-sub" hidden>
+          <div class="hint">Scegli la nuova password (almeno 12 caratteri).</div>
+          <div class="field"><label for="newPassword">Nuova password</label><input id="newPassword" type="password" autocomplete="new-password"></div>
+          <div class="btnrow"><button class="btn primary" type="button" id="pwResetSave">Salva nuova password</button></div>
+        </div>
 
         <div id="syncUser" hidden>
           <div class="btnrow">
@@ -196,12 +224,35 @@
     </div>
   </div>
 
+  <!-- ═══════════════ NOTA DEL GIORNO ═══════════════ -->
+  <div class="modal-overlay" id="noteModal" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <h3 id="noteTitle">Nota</h3>
+      <div class="field"><label for="noteText">Testo (max 500 caratteri)</label>
+        <textarea id="noteText" maxlength="500" rows="4" placeholder="Es. eccezione chiesta da Meryl; weekend in più concordato; ritiro alle 17:20"></textarea>
+      </div>
+      <div class="btnrow">
+        <button class="btn primary" type="button" id="noteSave">Salva</button>
+        <button class="btn ghost" type="button" id="noteDelete">Elimina nota</button>
+        <button class="btn ghost" type="button" id="noteCancel">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="undo-bar" id="undoBar" role="status" aria-live="polite" hidden>
+    <span id="undoText"></span>
+    <button type="button" id="undoBtn">↶ Annulla</button>
+  </div>
+
   <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 </main>
+<div id="printArea" class="print-area" aria-hidden="true"></div>
 
 <script src="cloud-config.js" defer></script>
 <script src="supabase.min.js" defer></script>
 <script src="app-core.js" defer></script>
+<script src="app-extra.js" defer></script>
 <script src="app-sync.js" defer></script>
 <script src="app-bootstrap.js" defer></script>
 </body>
