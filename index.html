@@ -47,6 +47,11 @@
 
   <div class="content">
 
+    <section class="agent-inbox" id="agentInbox" aria-labelledby="agentTitle" hidden>
+      <h4 id="agentTitle">🤖 Richieste dell'agente <span class="agent-count" id="agentCount"></span></h4>
+      <div id="agentList" class="agent-list"></div>
+    </section>
+
     <div class="reminder" id="reminderBar" role="status" hidden>
       <span id="reminderText"></span>
       <div class="reminder-actions">
@@ -191,12 +196,18 @@
             <button class="btn" type="button" id="syncNow">⟳ Sincronizza ora</button>
             <button class="btn" type="button" id="historyBtn">🕘 Storico modifiche</button>
             <button class="btn" type="button" id="shareToggle">🔗 Link sola lettura</button>
+            <button class="btn" type="button" id="agentLogBtn">🤖 Registro agente</button>
             <button class="btn ghost" type="button" id="syncSignOut">Esci</button>
           </div>
 
           <div class="sync-sub" id="historyBox" hidden>
             <div class="hint">Ultime 100 modifiche registrate dal database (non modificabili).</div>
             <div class="hist-list" id="historyList"></div>
+          </div>
+
+          <div class="sync-sub" id="agentLogBox" hidden>
+            <div class="hint">Cosa ha fatto l'agente automatico (ultimi 30 interventi). L'agente prepara bozze e chiede conferme: non invia e non cancella nulla da solo.</div>
+            <div class="hist-list" id="agentLogList"></div>
           </div>
 
           <div class="sync-sub" id="shareBox" hidden>

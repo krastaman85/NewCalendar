@@ -360,6 +360,7 @@
         else { await flush(); await pull(); }
         state.lastSync = new Date().toISOString();
         saveState();
+        loadAgentRequests();
         lastError = "";
         setState(pendingCount() ? "pending" : "ok");
       } catch (e) {
@@ -508,6 +509,7 @@
     if (!confirm(msg)) return;
     await sb.auth.signOut();
     queue = { days: {}, notes: {}, settings: 0 }; saveQueue();
+    renderAgentRequests([]);
     state = {}; saveState();
     setMsg("Dispositivo scollegato.");
     setState("off");
@@ -531,6 +533,92 @@
         ? `Nota del ${swissDate(r.day)}: ${q(r.old_note)} → ${q(r.new_note)}`
         : `${r.child} · ${swissDate(r.day)}: ${kindLabel(r.old_kind)} → ${kindLabel(r.new_kind)}`));
       row.appendChild(el("div", "hist-meta", `${swissDateTime(r.changed_at)} · ${r.actor}`));
+      list.appendChild(row);
+    });
+  }
+
+  // ── richieste dell'agente ─────────────────────────────────────────────
+  // L'agente (attività programmate di Claude) scrive richieste nel database;
+  // qui l'utente risponde. Le conferme di un giorno vengono applicate come una
+  // normale modifica dell'utente (storico: «app»), mai dall'agente.
+  const PRIO = { urgente: "🔴", alta: "🟠", normale: "🔵", bassa: "⚪" };
+  async function loadAgentRequests() {
+    const box = $("agentInbox");
+    if (!box || !sb || !user) { if (box) box.hidden = true; return; }
+    const { data, error } = await sb.from("agent_requests")
+      .select("id,created_at,kind,priority,title,body,payload,link,due_date,status,expires_at")
+      .eq("status", "aperta")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    if (error) return; // tabella non ancora disponibile o rete assente: nessun disturbo
+    const now = Date.now();
+    const open = (data || []).filter(r => !r.expires_at || new Date(r.expires_at).getTime() > now);
+    const rank = { urgente: 0, alta: 1, normale: 2, bassa: 3 };
+    open.sort((a, b) => (rank[a.priority] - rank[b.priority]) || (a.created_at < b.created_at ? 1 : -1));
+    renderAgentRequests(open);
+  }
+  function renderAgentRequests(list) {
+    const box = $("agentInbox"), wrap = $("agentList");
+    wrap.textContent = "";
+    box.hidden = !list.length;
+    $("agentCount").textContent = list.length ? `(${list.length})` : "";
+    list.forEach(r => {
+      const card = el("div", "agent-card prio-" + r.priority);
+      card.appendChild(el("div", "agent-head", `${PRIO[r.priority] || ""} ${r.title}`));
+      if (r.body) card.appendChild(el("div", "agent-body", r.body));
+      const meta = [];
+      if (r.due_date) meta.push("scadenza " + swissDate(r.due_date));
+      meta.push("ricevuta " + swissDateTime(r.created_at));
+      card.appendChild(el("div", "hist-meta", meta.join(" · ")));
+      const acts = el("div", "share-actions");
+      const p = r.payload || {};
+      if (r.kind === "conferma_giorno" && p.child && /^\d{4}-\d{2}-\d{2}$/.test(p.day || "") && (p.kind === "pern" || p.kind === "sing" || p.kind === null)) {
+        acts.appendChild(btn(`✓ Sì, segna ${kindLabel(p.kind)}`, "primary", () => answerRequest(r, "sì", true)));
+        acts.appendChild(btn("✗ No", "ghost", () => answerRequest(r, "no")));
+      } else {
+        acts.appendChild(btn("✓ Visto", "", () => answerRequest(r, "visto", false, "chiusa")));
+      }
+      acts.appendChild(btn("✎ Rispondi", "ghost", () => {
+        const t = prompt("Risposta per l'agente:", "");
+        if (t && t.trim()) answerRequest(r, t.trim().slice(0, 1000));
+      }));
+      if (r.link) {
+        acts.appendChild(btn("↗ Apri", "ghost", () => { window.open(r.link, "_blank", "noopener"); }));
+      }
+      card.appendChild(acts);
+      wrap.appendChild(card);
+    });
+  }
+  async function answerRequest(r, answer, applyDay, status) {
+    if (applyDay) {
+      const p = r.payload;
+      const [y, m, d] = p.day.split("-").map(Number);
+      if (!DATA.children.includes(p.child)) { toast("Figlio non trovato: " + p.child); return; }
+      const entry = getEntry(y, m - 1, p.child);
+      const before = cloneEntries();
+      if (p.kind) entry[d] = p.kind; else delete entry[d];
+      saveData();
+      entriesChanged(before);
+      rerenderApp();
+    }
+    const { error } = await sb.from("agent_requests")
+      .update({ status: status || "risposta", answer, answered_at: new Date().toISOString() })
+      .eq("id", r.id);
+    if (error) { toast("⚠ Risposta non inviata: " + errMsg(error)); return; }
+    toast("Risposta inviata all'agente");
+    loadAgentRequests();
+  }
+  async function showAgentLog() {
+    const list = $("agentLogList");
+    list.textContent = "Caricamento…";
+    const { data, error } = await sb.from("agent_log").select("at,routine,summary").order("at", { ascending: false }).limit(30);
+    list.textContent = "";
+    if (error) { list.textContent = errMsg(error); return; }
+    if (!data.length) { list.textContent = "Nessun intervento registrato."; return; }
+    data.forEach(r => {
+      const row = el("div", "hist-row");
+      row.appendChild(el("div", "hist-main", r.summary));
+      row.appendChild(el("div", "hist-meta", `${swissDateTime(r.at)} · ${r.routine}`));
       list.appendChild(row);
     });
   }
@@ -617,6 +705,7 @@
     on("syncNow", () => { setMsg(""); sync(); });
     on("historyBtn", () => { const box = $("historyBox"); box.hidden = !box.hidden; if (!box.hidden) showHistory(); });
     on("shareCreate", createShareLink);
+    on("agentLogBtn", () => { const box = $("agentLogBox"); box.hidden = !box.hidden; if (!box.hidden) showAgentLog(); });
     on("shareToggle", () => { const box = $("shareBox"); box.hidden = !box.hidden; if (!box.hidden) renderShareLinks(); });
     const badge = $("syncBadge");
     if (badge) badge.addEventListener("click", () => {

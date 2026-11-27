@@ -191,3 +191,10 @@ revoke execute on function public.get_shared_calendar(uuid) from authenticated;
 --   alter table public.app_settings add column schedule jsonb default '{}'
 --   function public.ping() returns now()  (eseguibile da anon, nessun dato)
 --   get_shared_calendar(token) restituisce anche 'notes'; eseguibile solo da anon
+
+-- ═══════════ 4) agente_richieste_e_registro (27.11.2026) ═══════════
+--   public.agent_requests: richieste dell'agente a Davide (kind conferma_giorno|informazione|bozza|scadenza|avviso,
+--     priority, title, body, payload, link https, due_date, status aperta|risposta|chiusa|scaduta, answer, expires_at).
+--     RLS: lettura proprietario; aggiornamento solo colonne status/answer/answered_at; nessun insert/delete dai client.
+--   public.agent_log: registro degli interventi dell'agente; solo lettura per il proprietario.
+--   L'agente scrive con SQL di amministrazione (attività programmate di Claude), mai su visits/day_notes.

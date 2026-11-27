@@ -75,6 +75,14 @@ def handler(route):
         if req.method == "POST": store["settings"] = body if not isinstance(body, list) else body[0]; return route.fulfill(status=201, headers=CORS)
     if table == "visits_audit": return J(list(reversed(store["audit"]))[:100])
     if table == "share_links": return J([])
+    if table == "agent_requests":
+        if req.method == "GET": return J([r for r in store.setdefault("agent", []) if r["status"] == "aperta"])
+        if req.method == "PATCH":
+            rid = int(q["id"][0][3:])
+            for r in store.setdefault("agent", []):
+                if r["id"] == rid: r.update(body)
+            return route.fulfill(status=204, headers=CORS)
+    if table == "agent_log": return J([{"at": "2026-11-27T19:37:00Z", "routine": "controllo serale", "summary": "Chiesta conferma del 27.11"}])
     return J({"message": "non gestito " + p}, 404)
 
 srv = subprocess.Popen([sys.executable, "-m", "http.server", "8790", "--bind", "127.0.0.1"], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -215,6 +223,19 @@ with sync_playwright() as p:
     E.click("[data-tab=summary]"); E.go_back(); E.wait_for_timeout(200)
     ck("tasto Indietro torna al Calendario", E.evaluate("currentTab()") == "calendar")
     ck("27 novembre: nessun promemoria", not A.is_visible("#reminderBar"))
+    store["agent"] = [
+      {"id": 1, "created_at": "2026-11-27T19:37:00Z", "kind": "conferma_giorno", "priority": "alta", "title": "Confermi il pernottamento di Kyan il 30.11?", "body": "Secondo lo schema lunedì 30 è un tuo giorno.", "payload": {"child": "Kyan Test", "day": "2026-11-30", "kind": "pern"}, "link": None, "due_date": None, "status": "aperta", "expires_at": None},
+      {"id": 2, "created_at": "2026-11-27T07:13:00Z", "kind": "bozza", "priority": "normale", "title": "E-mail della scuola: bozza pronta", "body": "Ho preparato la risposta in Gmail.", "payload": {}, "link": "https://mail.google.com/", "due_date": "2026-12-02", "status": "aperta", "expires_at": None}]
+    A.evaluate("CloudSync.syncNow()"); A.wait_for_timeout(1500)
+    ck("richieste dell'agente visibili", A.is_visible("#agentInbox") and "(2)" in A.inner_text("#agentCount"), A.inner_text("#agentInbox") if A.is_visible("#agentInbox") else "nascosto")
+    ck("richiesta alta priorità in cima", "Kyan" in A.locator(".agent-card").first.inner_text())
+    A.locator(".agent-card").first.locator("button", has_text="Sì, segna").click(); A.wait_for_timeout(300); wait_ok(A)
+    ck("conferma: giorno 30 segnato nel DB come modifica dell'utente", store["visits"].get(("Kyan Test", "2026-11-30")) == "pern", store["visits"].get(("Kyan Test", "2026-11-30")))
+    ck("conferma: risposta registrata", store["agent"][0]["status"] == "risposta" and store["agent"][0]["answer"] == "sì", store["agent"][0])
+    A.locator(".agent-card").first.locator("button", has_text="Visto").click(); A.wait_for_timeout(800)
+    ck("Visto: richiesta chiusa e riquadro nascosto", store["agent"][1]["status"] == "chiusa" and not A.is_visible("#agentInbox"))
+    A.click("[data-action=open-settings]"); A.click("#agentLogBtn"); A.wait_for_timeout(600)
+    ck("registro agente visibile", "Chiesta conferma" in A.inner_text("#agentLogList")); A.click("[data-action=close-settings]")
     ctxF, F = mk(SEED)
     F.clock.install(time="2026-11-29T09:00:00") if False else None
     F.close(); ctxF.close()
