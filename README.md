@@ -23,7 +23,17 @@ lo stesso calendario. Nessuna analisi, nessun tracciamento.
   altrimenti resta in coda e parte appena la rete torna. Il database fa fede.
 - **Storico modifiche** non cancellabile: data, ora, giorno, valore prima/dopo e autore.
 - **Link di sola lettura**: con nome, scadenza (1 giorno – 1 anno), periodo facoltativo,
-  contatore delle aperture e revoca immediata.
+  contatore delle aperture e revoca immediata. Mostra anche le note e permette il prospetto.
+- **Note del giorno**: pressione lunga su un giorno (o «✎ Note» e tocco). Sincronizzate e
+  registrate nello storico.
+- **Schema ricorrente** (settimana A/B) nelle Impostazioni e «📋 Applica schema»: completa
+  solo i giorni vuoti del mese, per tutti i figli.
+- **Annulla** dopo ogni modifica (7 secondi).
+- **Prospetto** stampabile/PDF (Riepilogo → 🧾): totali mensili e dettaglio giorno per giorno con note.
+- **Promemoria** dal 28 al 5: ricorda di preparare i moduli del mese.
+- **Navigazione** ‹ › tra le schermate, tasto Indietro di Android, frecce ← →, «📍 Oggi».
+- **Accessibilità**: giorni con etichette vocali per TalkBack, attivabili da tastiera (Invio, N = nota).
+- **Recupero password** via e-mail.
 - **Navigazione a gesto** (swipe) per cambiare mese; design animato e responsivo.
 
 ## Struttura dei file
@@ -37,7 +47,11 @@ lo stesso calendario. Nessuna analisi, nessun tracciamento.
 | `cloud-config.js` | Indirizzo del database e chiave pubblica (non segreta) |
 | `supabase.min.js` | Libreria client Supabase v2 (copia locale, niente CDN) |
 | `supabase/schema.sql` | Struttura del database, regole di accesso, funzioni |
-| `tests/collaudo_sync.py` | Collaudo automatico end-to-end (43 controlli) |
+| `app-extra.js` | Note, annulla, schema ricorrente, prospetto, promemoria |
+| `tools/genera-moduli.cjs` | Genera i moduli PDF da riga di comando (usato dall'attività mensile) |
+| `.github/workflows/database-attivo.yml` | Ping due volte a settimana per tenere attivo il database |
+| `tests/collaudo_sync.py` | Collaudo end-to-end sul database reale (utente di prova) |
+| `tests/collaudo_app_simulato.py` | Collaudo dell'app con database simulato (42 controlli) |
 | `app-events.js` | Delega degli eventi dei pulsanti |
 | `app-bootstrap.js` | Caricamento moduli non critici |
 | `app-pdf.js` | Caricamento on-demand di `pdf-lib` |

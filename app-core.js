@@ -2,6 +2,8 @@
 // STATO E PERSISTENZA (localStorage)
 // ══════════════════════════════════════════════════════════════════════
 const STORAGE_KEY = "diritti_visita_data_v1";
+// Chiavi mai accettate da dati esterni (anti prototype-pollution).
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 // Vista in sola lettura: l'app è aperta da un link "#view=<token>". In questa
 // modalità non si legge né si scrive nulla nel localStorage del dispositivo:
@@ -24,8 +26,41 @@ function defaultData() {
     children: ["Figlio 1", "Figlio 2"],
     birthdates: {},   // { "Nome figlio": "aaaa-mm-gg" }  (ISO per <input type=date>)
     entries: {},
+    notes: {},        // { "aaaa-mm-gg": "testo" }  note del giorno (valgono per tutti i figli)
+    schedule: defaultSchedule(),
     comboMode: false,
   };
+}
+
+// Schema ricorrente concordato. Settimana A = settimana del weekend col padre,
+// settimana B = l'altra. Indici 0..6 = lunedì..domenica; valori "pern", "sing" o "".
+// Valori iniziali = schema in prova dal 16.11.2026 (modificabile nelle Impostazioni).
+function defaultSchedule() {
+  return {
+    ref: "2026-11-16",
+    A: ["pern", "sing", "", "", "pern", "pern", "sing"],
+    B: ["", "", "pern", "sing", "", "", ""],
+  };
+}
+function sanitizeSchedule(sc) {
+  const def = defaultSchedule();
+  if (!sc || typeof sc !== "object") return def;
+  const row = (r, d) => Array.isArray(r) && r.length === 7 ? r.map(v => (v === "pern" || v === "sing") ? v : "") : d;
+  return {
+    ref: typeof sc.ref === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sc.ref) ? sc.ref : def.ref,
+    A: row(sc.A, def.A),
+    B: row(sc.B, def.B),
+  };
+}
+function sanitizeNotes(n) {
+  const out = {};
+  if (!n || typeof n !== "object") return out;
+  Object.keys(n).forEach(k => {
+    if (DANGEROUS_KEYS.has(k) || !/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+    const t = typeof n[k] === "string" ? n[k].trim().slice(0, 500) : "";
+    if (t) out[k] = t;
+  });
+  return out;
 }
 
 // Converte una data ISO (aaaa-mm-gg) nel formato svizzero gg.mm.aaaa usato dal
@@ -49,12 +84,23 @@ function loadData() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultData();
     const parsed = Object.assign(defaultData(), JSON.parse(raw));
+    parsed.profile = Object.assign(defaultData().profile, parsed.profile && typeof parsed.profile === "object" ? parsed.profile : {});
     if (parsed.profile && typeof parsed.profile === "object") {
       parsed.profile.domicilio = String(parsed.profile.domicilio || "").trim();
     }
     if (!parsed.birthdates || typeof parsed.birthdates !== "object") parsed.birthdates = {};
+    parsed.notes = sanitizeNotes(parsed.notes);
+    parsed.schedule = sanitizeSchedule(parsed.schedule);
     return parsed;
-  } catch (e) { return defaultData(); }
+  } catch (e) {
+    // Dati illeggibili: se ne conserva una copia grezza prima di ripartire da zero,
+    // così un errore non cancella mai definitivamente il calendario.
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) localStorage.setItem(STORAGE_KEY + "_illeggibile_" + Date.now(), raw);
+    } catch (_) {}
+    return defaultData();
+  }
 }
 function saveData() {
   if (READONLY_TOKEN) return;
@@ -125,16 +171,112 @@ function escapeHtml(str) {
 // ══════════════════════════════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════════════════════════════
+function currentTab() {
+  const t = document.querySelector(".tab.active");
+  return t ? t.dataset.tab : "calendar";
+}
+function showTab(name) {
+  const t = document.querySelector(`.tab[data-tab="${name}"]`);
+  const panel = document.getElementById("panel-" + name);
+  if (!t || !panel) return;
+  document.querySelectorAll(".tab").forEach(x => { x.classList.remove("active"); x.setAttribute("aria-selected", "false"); });
+  document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  t.setAttribute("aria-selected", "true");
+  panel.classList.add("active");
+  if (name === "summary") renderYearSummary();
+  if (name === "generate") renderGenerateList();
+}
 document.querySelectorAll(".tab").forEach(t => {
   t.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
-    t.classList.add("active");
-    document.getElementById("panel-" + t.dataset.tab).classList.add("active");
-    if (t.dataset.tab === "summary") renderYearSummary();
-    if (t.dataset.tab === "generate") renderGenerateList();
+    if (t.dataset.tab === currentTab()) return;
+    showTab(t.dataset.tab);
+    Nav.record();
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// NAVIGAZIONE INDIETRO / AVANTI
+// Ogni cambio di schermata (scheda, apertura/chiusura Impostazioni) viene
+// registrato nella cronologia del browser: funzionano i pulsanti ‹ › in alto,
+// il tasto/gesto Indietro di Android e Alt+← / Alt+→ da tastiera.
+// ══════════════════════════════════════════════════════════════════════
+const Nav = (() => {
+  const stack = [];
+  let idx = -1;
+  let applying = false;
+  const modalOpen = () => {
+    const m = document.getElementById("settingsModal");
+    return !!(m && m.classList.contains("show"));
+  };
+  const snapshot = () => ({ tab: currentTab(), modal: modalOpen() });
+  const same = (a, b) => !!a && !!b && a.tab === b.tab && a.modal === b.modal;
+  function updateButtons() {
+    const back = document.getElementById("navBack");
+    const fwd = document.getElementById("navFwd");
+    if (back) back.disabled = idx <= 0;
+    if (fwd) fwd.disabled = idx >= stack.length - 1;
+  }
+  function record() {
+    if (applying || idx < 0) return;
+    const s = snapshot();
+    if (same(s, stack[idx])) return;
+    stack.length = idx + 1;
+    stack.push(s);
+    idx = stack.length - 1;
+    try { history.pushState({ navIdx: idx }, ""); } catch (e) {}
+    updateButtons();
+  }
+  function apply(s) {
+    applying = true;
+    try {
+      if (s.tab !== currentTab()) showTab(s.tab);
+      if (s.modal && !modalOpen()) openModal("settingsModal");
+      if (!s.modal && modalOpen()) closeModal("settingsModal");
+    } finally { applying = false; }
+  }
+  window.addEventListener("popstate", (e) => {
+    const i = e.state && typeof e.state.navIdx === "number" ? e.state.navIdx : 0;
+    if (i < 0 || i >= stack.length) return;
+    idx = i;
+    apply(stack[idx]);
+    updateButtons();
+  });
+  function init() {
+    stack.length = 0;
+    stack.push(snapshot());
+    idx = 0;
+    try { history.replaceState({ navIdx: 0 }, ""); } catch (e) {}
+    updateButtons();
+    const back = document.getElementById("navBack");
+    const fwd = document.getElementById("navFwd");
+    if (back) back.addEventListener("click", () => { if (idx > 0) history.back(); });
+    if (fwd) fwd.addEventListener("click", () => { if (idx < stack.length - 1) history.forward(); });
+  }
+  return { record, init };
+})();
+
+// Scorciatoie da tastiera: ← / → cambiano mese (o anno nel Riepilogo).
+document.addEventListener("keydown", (e) => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  const tag = (e.target && e.target.tagName) || "";
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
+  const m = document.getElementById("settingsModal");
+  if (m && m.classList.contains("show")) return;
+  const delta = e.key === "ArrowLeft" ? -1 : 1;
+  if (currentTab() === "summary") changeYear(delta); else changeMonth(delta);
+  e.preventDefault();
+});
+
+function goToToday() {
+  const t = new Date();
+  curYear = t.getFullYear();
+  curMonth = t.getMonth();
+  renderCalendar();
+  invalidateGenerated();
+  if (currentTab() === "summary") renderYearSummary();
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // SELETTORE FIGLIO — segmented control colorato
@@ -226,7 +368,7 @@ function renderCalendar(popDay) {
   for (let d = 1; d <= dim; d++) {
     const el = document.createElement("div");
     const isToday = isCurMonth && d === today.getDate();
-    el.onclick = () => cycleDay(d);
+    attachDayHandlers(el, d);
 
     if (comboMode) {
       el.className = "daycell combo" + (isToday ? " today" : "");
@@ -262,10 +404,53 @@ function renderCalendar(popDay) {
       el.textContent = d;
     }
     if (d === popDay) el.classList.add("daycell-pop");
+    const iso = `${curYear}-${String(curMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const note = (DATA.notes || {})[iso];
+    if (note) { el.classList.add("has-note"); el.title = note; }
+    el.setAttribute("role", "button");
+    el.tabIndex = 0;
+    el.setAttribute("aria-label", dayAriaLabel(d, note));
     grid.appendChild(el);
   }
   renderLegend();
   updateStats();
+  if (typeof renderNotesList === "function") renderNotesList();
+}
+
+const KIND_LABEL = { pern: "pernottamento", sing: "giorno singolo" };
+function dayAriaLabel(d, note) {
+  const base = `${d} ${MESI[curMonth].toLowerCase()} ${curYear}`;
+  const who = comboMode ? DATA.children : [activeChild];
+  const parts = who.map(c => `${c}: ${KIND_LABEL[getEntry(curYear, curMonth, c)[d]] || "nessuna visita"}`);
+  return `${base}. ${parts.join(", ")}${note ? ". Nota: " + note : ""}`;
+}
+
+// Tocco = cambia stato (o apre la nota in modalità Note); pressione lunga = nota.
+// Da tastiera: Invio/Spazio come il tocco, N per la nota.
+let notesMode = false;
+function attachDayHandlers(el, d) {
+  let timer = null, longDone = false, sx = 0, sy = 0;
+  const openNote = () => { if (typeof openNoteEditor === "function") openNoteEditor(d); };
+  el.addEventListener("click", () => {
+    if (longDone) { longDone = false; return; }
+    if (notesMode || READONLY_TOKEN) { if (!READONLY_TOKEN) openNote(); return; }
+    cycleDay(d);
+  });
+  el.addEventListener("pointerdown", (e) => {
+    longDone = false; sx = e.clientX; sy = e.clientY;
+    if (READONLY_TOKEN) return;
+    timer = setTimeout(() => { longDone = true; timer = null; if (navigator.vibrate) navigator.vibrate(15); openNote(); }, 550);
+  });
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener("pointerup", cancel);
+  el.addEventListener("pointerleave", cancel);
+  el.addEventListener("pointercancel", cancel);
+  el.addEventListener("pointermove", (e) => { if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancel(); });
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); }
+    else if ((e.key === "n" || e.key === "N") && !READONLY_TOKEN) { e.preventDefault(); openNote(); }
+  });
 }
 
 function cycleDay(d) {
@@ -273,6 +458,7 @@ function cycleDay(d) {
   const entry = getEntry(curYear, curMonth, activeChild);
   const cur = entry[d] || "";
   const next = cur === "" ? "pern" : cur === "pern" ? "sing" : "";
+  if (typeof pushUndo === "function") pushUndo(`${activeChild}, ${d} ${MESI[curMonth].toLowerCase()}: ${KIND_LABEL[next] || "nessuna visita"}`);
   if (next === "") delete entry[d]; else entry[d] = next;
   saveData();
   syncHook("dayChanged", activeChild, curYear, curMonth, d, next || null);
@@ -428,6 +614,7 @@ function copyFromPreviousMonth() {
   const curKey = monthKey(curYear, curMonth);
   if (!DATA.entries[prevKey] || !DATA.entries[prevKey][activeChild]) { toast("Nessun dato nel mese precedente"); return; }
   const before = cloneEntries();
+  if (typeof pushUndo === "function") pushUndo("Copia dal mese precedente");
   if (!DATA.entries[curKey]) DATA.entries[curKey] = {};
   // Si copiano solo i giorni che esistono anche nel mese corrente (es. il 31).
   const src = DATA.entries[prevKey][activeChild];
@@ -443,6 +630,7 @@ function copyFromPreviousMonth() {
 function clearMonth() {
   if (!confirm(`Svuotare tutti i giorni di ${activeChild} per ${MESI[curMonth]} ${curYear}?`)) return;
   const before = cloneEntries();
+  if (typeof pushUndo === "function") pushUndo("Mese svuotato");
   const key = monthKey(curYear, curMonth);
   if (DATA.entries[key]) delete DATA.entries[key][activeChild];
   saveData(); renderCalendar(); invalidateGenerated();
@@ -478,25 +666,7 @@ function renderYearSummary() {
 function changeYear(delta) { curYear += delta; renderYearSummary(); }
 
 function printYearSummary() {
-  const w = window.open("");
-  const rows = document.getElementById("yearTable").innerHTML;
-  const col = getChildColor(activeChild);
-  w.document.write(`
-    <html><head><title>Riepilogo ${curYear}</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:20px}
-      h2{margin-bottom:4px;color:${col.hex}} p{color:#555;font-size:12px;margin-bottom:16px}
-      table{width:100%;border-collapse:collapse;font-size:13px}
-      th,td{border:1px solid #999;padding:8px;text-align:center}
-      th{background:#eee}
-    </style></head><body>
-    <h2>Riepilogo annuale diritti di visita — ${escapeHtml(activeChild)}</h2>
-    <p>Anno ${curYear} — ${escapeHtml(DATA.profile.richiedente)}</p>
-    <table>${rows}</table>
-    </body></html>
-  `);
-  w.document.close();
-  setTimeout(() => w.print(), 300);
+  if (typeof printReport === "function") printReport({ year: curYear, children: [activeChild], detail: false });
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -563,7 +733,7 @@ if (importInput) {
 // Questo impedisce sia l'inquinamento del prototipo sia l'introduzione di
 // dati malformati che romperebbero il calendario.
 // ══════════════════════════════════════════════════════════════════════
-const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+// (DANGEROUS_KEYS è definito in cima al file: serve già al caricamento dei dati)
 
 function sanitizeBackupData(parsed) {
   if (!parsed || typeof parsed !== "object") return null;
@@ -622,6 +792,8 @@ function sanitizeBackupData(parsed) {
     safe.entries = cleanEntries;
   }
 
+  safe.notes = sanitizeNotes(parsed.notes);
+  safe.schedule = sanitizeSchedule(parsed.schedule);
   safe.comboMode = !!parsed.comboMode;
   return safe;
 }
@@ -629,22 +801,42 @@ function sanitizeBackupData(parsed) {
 // ══════════════════════════════════════════════════════════════════════
 // IMPOSTAZIONI
 // ══════════════════════════════════════════════════════════════════════
-function openModal(id) {
-  if (id === "settingsModal") {
-    document.getElementById("setRichiedente").value = DATA.profile.richiedente;
-    document.getElementById("setDomicilio").value = DATA.profile.domicilio;
-    document.getElementById("setFunzionario").value = DATA.profile.funzionario;
-    renderChildFields();
-  }
-  document.getElementById(id).classList.add("show");
+// Riempie il modulo Impostazioni con i dati attuali (anche quando la
+// sincronizzazione porta impostazioni nuove mentre il modulo è aperto).
+function refreshSettingsForm() {
+  childDraft = DATA.children.map(c => ({ orig: c, name: c, bday: DATA.birthdates[c] || "" }));
+  document.getElementById("setRichiedente").value = DATA.profile.richiedente;
+  document.getElementById("setDomicilio").value = DATA.profile.domicilio;
+  document.getElementById("setFunzionario").value = DATA.profile.funzionario;
+  renderChildFields();
+  if (typeof renderScheduleEditor === "function") renderScheduleEditor();
 }
-function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+function openModal(id) {
+  if (id === "settingsModal") refreshSettingsForm();
+  document.getElementById(id).classList.add("show");
+  Nav.record();
+}
+// Chiusura senza «Salva»: figli e schema restano com'erano, perché il modulo
+// lavora su una bozza (childDraft, bozza dello schema) e non su DATA.
+function closeModal(id) {
+  document.getElementById(id).classList.remove("show");
+  Nav.record();
+}
 
+let childDraft = [];   // [{ orig: nome originale | null, name, bday }]
+function captureChildDraft() {
+  document.querySelectorAll("#childList .childlist-item").forEach((row, i) => {
+    if (!childDraft[i]) return;
+    childDraft[i].name = row.querySelector(".child-name").value;
+    childDraft[i].bday = row.querySelector(".child-bday").value;
+  });
+}
 function renderChildFields() {
   const list = document.getElementById("childList");
   list.innerHTML = "";
-  DATA.children.forEach((c, i) => {
-    const col = getChildColor(c);
+  childDraft.forEach((item, i) => {
+    const c = item.name;
+    const col = getChildColor(item.orig || c);
     const row = document.createElement("div");
     row.className = "childlist-item";
 
@@ -663,7 +855,7 @@ function renderChildFields() {
     const bday = document.createElement("input");
     bday.type = "date";
     bday.className = "child-bday";
-    bday.value = DATA.birthdates[c] || "";
+    bday.value = item.bday || "";
     bday.dataset.idx = String(i);
     bday.setAttribute("aria-label", `Data di nascita del figlio ${i + 1}`);
     bday.title = "Data di nascita";
@@ -681,10 +873,11 @@ function renderChildFields() {
     list.appendChild(row);
   });
 }
-function addChildField() { DATA.children.push("Nuovo figlio"); renderChildFields(); }
+function addChildField() { captureChildDraft(); childDraft.push({ orig: null, name: "Nuovo figlio", bday: "" }); renderChildFields(); }
 function removeChildField(i) {
-  if (DATA.children.length <= 1) { alert("Deve restare almeno un figlio."); return; }
-  DATA.children.splice(i, 1); renderChildFields();
+  captureChildDraft();
+  if (childDraft.length <= 1) { alert("Deve restare almeno un figlio."); return; }
+  childDraft.splice(i, 1); renderChildFields();
 }
 function saveSettings() {
   DATA.profile.richiedente = document.getElementById("setRichiedente").value.trim();
@@ -700,7 +893,8 @@ function saveSettings() {
     const input = row.querySelector(".child-name");
     const name = (input?.value || "").trim().slice(0, 60);
     if (!name || DANGEROUS_KEYS.has(name) || children.includes(name)) return;
-    const oldName = DATA.children[Number(input.dataset.idx)];
+    const draft = childDraft[Number(input.dataset.idx)];
+    const oldName = draft ? draft.orig : null;
     if (oldName && oldName !== name) renames.push([oldName, name]);
     children.push(name);
     const bday = (row.querySelector(".child-bday")?.value || "").trim();
@@ -720,6 +914,7 @@ function saveSettings() {
     DATA.birthdates = birthdates;
   }
   if (!DATA.children.includes(activeChild)) activeChild = DATA.children[0];
+  if (typeof readScheduleEditor === "function") DATA.schedule = readScheduleEditor();
   saveData(); closeModal("settingsModal"); renderCalendar(); invalidateGenerated();
   syncHook("entriesChanged", before);
   syncHook("settingsChanged");
@@ -866,7 +1061,9 @@ async function fillFormPdf(child) {
   setIfExists("Domicilio", (DATA.profile.domicilio || "").trim());
 
   const cognomeBase = DATA.profile.richiedente.split(" ")[0] || "";
-  setIfExists("per figlio", `${cognomeBase} ${child}`.trim());
+  // Se il nome del figlio contiene già il cognome (es. «Meryl Diasio») non lo si ripete.
+  const hasSurname = cognomeBase && child.toLowerCase().split(/\s+/).includes(cognomeBase.toLowerCase());
+  setIfExists("per figlio", hasSurname ? child : `${cognomeBase} ${child}`.trim());
   setIfExists("data di nascita", isoToSwissDate(DATA.birthdates[child]));
   // "per il mese" = mese di riferimento del calendario (es. "Agosto 2026"),
   // NON la data odierna. Gli altri eventuali campi data ricevono la data di oggi.
@@ -1000,3 +1197,8 @@ async function generateAllForms() {
 // ══════════════════════════════════════════════════════════════════════
 document.getElementById("comboBtn").classList.toggle("on", comboMode);
 renderCalendar();
+Nav.init();
+{
+  const tb = document.getElementById("todayBtn");
+  if (tb) tb.addEventListener("click", goToToday);
+}

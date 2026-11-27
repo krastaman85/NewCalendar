@@ -525,5 +525,106 @@
   [hidden] { display: none !important; }
   body.ro-error .tabbar, body.ro-error .content { display: none !important; }
   .pw-row { display: flex; gap: 8px; }
-  .pw-row input { flex: 1; min-width: 0; }
-  .pw-toggle { padding: 0 12px; }
+  .pw-row input { flex: 1 1 auto; min-width: 0; width: auto; }
+  .pw-row .pw-toggle { flex: 0 0 52px; width: 52px; padding: 0; justify-content: center; }
+
+  /* ═══════════════ NAVIGAZIONE INDIETRO / AVANTI ═══════════════ */
+  .header-nav { display: flex; gap: 6px; margin-left: auto; margin-right: 8px; }
+  .nav-btn {
+    width: 38px; height: 38px; border-radius: 12px; cursor: pointer;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .nav-btn:not(:disabled):active { transform: scale(0.92); background: var(--surface3); }
+  .nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .viewtoggle { gap: 8px; }
+  @media (max-width: 420px) {
+    .header-logo { display: none; }
+    .header-title .sub { display: none; }
+    .header { padding-left: 14px; padding-right: 14px; }
+    .header-nav { margin-right: 6px; gap: 5px; }
+    .nav-btn, .sync-badge, .header-icon-btn { height: 36px; }
+    .nav-btn { width: 34px; }
+  }
+
+  /* ═══════════════ NOTE ═══════════════ */
+  .daycell.has-note::after {
+    content: "✎"; position: absolute; left: 4px; bottom: 2px; font-size: 9px; line-height: 1;
+    color: var(--text); opacity: 0.85; pointer-events: none;
+  }
+  .daycell { position: relative; }
+  body.notes-mode .daycell:not(.empty) { outline: 1px dashed var(--accent); outline-offset: -3px; }
+  .notes-section { margin-top: 18px; }
+  .notes-section h4 { font-family: 'Syne', sans-serif; font-size: 13px; margin-bottom: 8px; }
+  .notes-list { display: flex; flex-direction: column; gap: 6px; }
+  .note-row {
+    display: flex; gap: 10px; align-items: baseline; text-align: left; width: 100%;
+    padding: 9px 11px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 11px; cursor: pointer;
+  }
+  div.note-row { cursor: default; }
+  .note-date { color: var(--accent); white-space: nowrap; font-weight: 600; }
+  .note-text { line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .field textarea {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px 13px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; resize: vertical;
+  }
+  .field textarea:focus { outline: none; border-color: var(--accent); }
+
+  /* ═══════════════ ANNULLA ═══════════════ */
+  .undo-bar {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 120; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px);
+    padding: 10px 12px 10px 16px; border-radius: 14px; background: var(--surface3); border: 1px solid var(--border);
+    box-shadow: var(--shadow-pop); font-size: 11.5px; color: var(--text);
+  }
+  .undo-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .undo-bar button {
+    flex-shrink: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--accent);
+    background: var(--accent-soft); color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+  }
+
+  /* ═══════════════ SCHEMA RICORRENTE ═══════════════ */
+  .sched-hint { margin: 0 0 8px; }
+  .sched-editor { display: flex; flex-direction: column; gap: 8px; }
+  .sched-label { font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+  .sched-cells { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .sched-cell {
+    height: 36px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+  }
+  .sched-cell[data-kind="pern"] { background: var(--child-first); color: #06240f; border-color: var(--child-first); font-weight: 700; }
+  .sched-cell[data-kind="sing"] { background: color-mix(in srgb, var(--child-first) 35%, var(--surface)); border-color: var(--child-first); }
+  .sched-ref { margin-top: 10px; margin-bottom: 0; }
+  .linkbtn { background: none; border: none; color: var(--accent); font-family: 'DM Mono', monospace; font-size: 11px; cursor: pointer; padding: 10px 0 0; text-decoration: underline; }
+
+  /* ═══════════════ PROSPETTO / STAMPA ═══════════════ */
+  .print-area { display: none; }
+  @media print {
+    body.printing > *:not(#printArea) { display: none !important; }
+    body.printing #printArea { display: block !important; }
+    body.printing { background: #fff !important; color: #000 !important; }
+    html { background: #fff !important; }
+    .print-area { font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 10.5pt; }
+    .print-area h1 { font-size: 15pt; margin: 0 0 4pt; }
+    .print-area h2 { font-size: 12pt; margin: 14pt 0 6pt; }
+    .print-area .pr-sub { font-size: 9pt; color: #333; margin: 0 0 3pt; }
+    .print-area .pr-table { width: 100%; border-collapse: collapse; margin-top: 8pt; }
+    .print-area .pr-table th, .print-area .pr-table td { border: 1px solid #888; padding: 3pt 5pt; text-align: center; vertical-align: top; }
+    .print-area .pr-table th { background: #eee; font-size: 9pt; }
+    .print-area .pr-left { text-align: left !important; }
+    .print-area .pr-total td { font-weight: bold; background: #f4f4f4; }
+    .print-area tr { page-break-inside: avoid; }
+    .print-area .pr-foot { font-size: 8.5pt; color: #333; margin-top: 10pt; }
+  }
+  body.readonly #notesBtn, body.readonly #scheduleApply { display: none !important; }
+  body.readonly #panel-summary .btnrow #reportBtn { display: inline-flex !important; }
+
+  /* ═══════════════ PROMEMORIA ═══════════════ */
+  .reminder {
+    margin-bottom: 14px; padding: 12px 14px; border-radius: var(--radius-sm);
+    background: var(--accent-soft); border: 1px solid var(--accent); font-size: 11.5px; line-height: 1.6;
+  }
+  .reminder-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .reminder-actions .btn { padding: 8px 12px; font-size: 11px; }

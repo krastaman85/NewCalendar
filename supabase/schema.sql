@@ -180,3 +180,14 @@ create trigger un_solo_proprietario
   for each row execute function public.block_extra_signups();
 
 revoke execute on function public.get_shared_calendar(uuid) from authenticated;
+
+-- ═══════════ 3) note_schema_ping (27.11.2026) ═══════════
+-- Note per giorno con storico, schema ricorrente nelle impostazioni, ping,
+-- note incluse nel link di sola lettura. Vedi migrazione "note_schema_ping"
+-- su Supabase per il testo completo; riassunto:
+--   create table public.day_notes (user_id, day, note ≤ 500, updated_at, PK(user_id, day)) + RLS proprietario
+--   alter table public.visits_audit add entity ('visita'|'nota'), old_note, new_note; child nullable
+--   trigger notes_audit_trg → public.log_note_change() (security definer)
+--   alter table public.app_settings add column schedule jsonb default '{}'
+--   function public.ping() returns now()  (eseguibile da anon, nessun dato)
+--   get_shared_calendar(token) restituisce anche 'notes'; eseguibile solo da anon
