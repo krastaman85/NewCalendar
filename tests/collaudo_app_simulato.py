@@ -1,5 +1,4 @@
-"""Collaudo dell'app con un database simulato (nessun dato reale toccato): note, annulla,
-schema, impostazioni, prospetto, sola lettura, recupero password, promemoria, navigazione.
+"""Collaudo dell'app con un database simulato (nessun dato reale toccato).
 Uso: python3 tests/collaudo_app_simulato.py"""
 import json, re, sys, time, subprocess, os, base64, urllib.parse
 from playwright.sync_api import sync_playwright
@@ -111,6 +110,7 @@ with sync_playwright() as p:
         pg.click("[data-action=open-settings]"); pg.fill("#syncEmail", EMAIL); pg.fill("#syncPassword", "x" * 14)
         pg.click("#syncSignIn"); st = wait_ok(pg); pg.click("[data-action=close-settings]"); pg.wait_for_timeout(200); return st
 
+    store["settings"] = {"user_id": UID, "profile": {}, "children": ["Meryl Test", "Kyan Test"], "birthdates": {}, "schedule": {}}
     ctxA, A = mk(SEED)
     A.goto(URL); A.wait_for_timeout(1200)
     ck("dati locali esistenti non persi con la nuova versione", "pern" in cell(A, 4).get_attribute("class"))
@@ -121,7 +121,8 @@ with sync_playwright() as p:
     st = login(A)
     ck("A: sincronizzato", st["state"] == "ok", st)
     ck("DB: nota caricata", store["notes"].get("2026-11-25") == "Eccezione chiesta da Meryl", store["notes"])
-    ck("DB: schema salvato nelle impostazioni", store["settings"] and store["settings"].get("schedule", {}).get("ref") == "2026-11-16", store["settings"])
+    wait_ok(A); A.wait_for_timeout(1500); wait_ok(A)
+    ck("DB senza schema: il dispositivo lo carica", store["settings"] and store["settings"].get("schedule", {}).get("ref") == "2026-11-16", store["settings"])
 
     # nota con pressione lunga
     box = cell(A, 22).bounding_box()

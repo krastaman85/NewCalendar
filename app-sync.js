@@ -298,7 +298,10 @@
     const changedNotes = sigN(notes) !== sigN(DATA.notes);
     if (changedNotes) DATA.notes = notes;
     const changedSettings = !queue.settings && applyServerSettings(settings);
-    if (!settings && !queue.settings) { queue.settings = ++ver; saveQueue(); }
+    // Impostazioni assenti nel database, oppure senza schema ricorrente
+    // (account creato prima della versione con lo schema): si caricano quelle locali.
+    const noSchedule = settings && !(settings.schedule && Array.isArray(settings.schedule.A));
+    if ((!settings || noSchedule) && !queue.settings) { queue.settings = ++ver; saveQueue(); scheduleSync(500); }
     if (changedEntries || changedSettings || changedNotes) {
       saveData();
       rerenderApp();
