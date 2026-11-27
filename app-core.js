@@ -125,16 +125,112 @@ function escapeHtml(str) {
 // ══════════════════════════════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════════════════════════════
+function currentTab() {
+  const t = document.querySelector(".tab.active");
+  return t ? t.dataset.tab : "calendar";
+}
+function showTab(name) {
+  const t = document.querySelector(`.tab[data-tab="${name}"]`);
+  const panel = document.getElementById("panel-" + name);
+  if (!t || !panel) return;
+  document.querySelectorAll(".tab").forEach(x => { x.classList.remove("active"); x.setAttribute("aria-selected", "false"); });
+  document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  t.setAttribute("aria-selected", "true");
+  panel.classList.add("active");
+  if (name === "summary") renderYearSummary();
+  if (name === "generate") renderGenerateList();
+}
 document.querySelectorAll(".tab").forEach(t => {
   t.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
-    t.classList.add("active");
-    document.getElementById("panel-" + t.dataset.tab).classList.add("active");
-    if (t.dataset.tab === "summary") renderYearSummary();
-    if (t.dataset.tab === "generate") renderGenerateList();
+    if (t.dataset.tab === currentTab()) return;
+    showTab(t.dataset.tab);
+    Nav.record();
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// NAVIGAZIONE INDIETRO / AVANTI
+// Ogni cambio di schermata (scheda, apertura/chiusura Impostazioni) viene
+// registrato nella cronologia del browser: funzionano i pulsanti ‹ › in alto,
+// il tasto/gesto Indietro di Android e Alt+← / Alt+→ da tastiera.
+// ══════════════════════════════════════════════════════════════════════
+const Nav = (() => {
+  const stack = [];
+  let idx = -1;
+  let applying = false;
+  const modalOpen = () => {
+    const m = document.getElementById("settingsModal");
+    return !!(m && m.classList.contains("show"));
+  };
+  const snapshot = () => ({ tab: currentTab(), modal: modalOpen() });
+  const same = (a, b) => !!a && !!b && a.tab === b.tab && a.modal === b.modal;
+  function updateButtons() {
+    const back = document.getElementById("navBack");
+    const fwd = document.getElementById("navFwd");
+    if (back) back.disabled = idx <= 0;
+    if (fwd) fwd.disabled = idx >= stack.length - 1;
+  }
+  function record() {
+    if (applying || idx < 0) return;
+    const s = snapshot();
+    if (same(s, stack[idx])) return;
+    stack.length = idx + 1;
+    stack.push(s);
+    idx = stack.length - 1;
+    try { history.pushState({ navIdx: idx }, ""); } catch (e) {}
+    updateButtons();
+  }
+  function apply(s) {
+    applying = true;
+    try {
+      if (s.tab !== currentTab()) showTab(s.tab);
+      if (s.modal && !modalOpen()) openModal("settingsModal");
+      if (!s.modal && modalOpen()) closeModal("settingsModal");
+    } finally { applying = false; }
+  }
+  window.addEventListener("popstate", (e) => {
+    const i = e.state && typeof e.state.navIdx === "number" ? e.state.navIdx : 0;
+    if (i < 0 || i >= stack.length) return;
+    idx = i;
+    apply(stack[idx]);
+    updateButtons();
+  });
+  function init() {
+    stack.length = 0;
+    stack.push(snapshot());
+    idx = 0;
+    try { history.replaceState({ navIdx: 0 }, ""); } catch (e) {}
+    updateButtons();
+    const back = document.getElementById("navBack");
+    const fwd = document.getElementById("navFwd");
+    if (back) back.addEventListener("click", () => { if (idx > 0) history.back(); });
+    if (fwd) fwd.addEventListener("click", () => { if (idx < stack.length - 1) history.forward(); });
+  }
+  return { record, init };
+})();
+
+// Scorciatoie da tastiera: ← / → cambiano mese (o anno nel Riepilogo).
+document.addEventListener("keydown", (e) => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  const tag = (e.target && e.target.tagName) || "";
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
+  const m = document.getElementById("settingsModal");
+  if (m && m.classList.contains("show")) return;
+  const delta = e.key === "ArrowLeft" ? -1 : 1;
+  if (currentTab() === "summary") changeYear(delta); else changeMonth(delta);
+  e.preventDefault();
+});
+
+function goToToday() {
+  const t = new Date();
+  curYear = t.getFullYear();
+  curMonth = t.getMonth();
+  renderCalendar();
+  invalidateGenerated();
+  if (currentTab() === "summary") renderYearSummary();
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // SELETTORE FIGLIO — segmented control colorato
@@ -637,8 +733,9 @@ function openModal(id) {
     renderChildFields();
   }
   document.getElementById(id).classList.add("show");
+  Nav.record();
 }
-function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+function closeModal(id) { document.getElementById(id).classList.remove("show"); Nav.record(); }
 
 function renderChildFields() {
   const list = document.getElementById("childList");
@@ -1000,3 +1097,8 @@ async function generateAllForms() {
 // ══════════════════════════════════════════════════════════════════════
 document.getElementById("comboBtn").classList.toggle("on", comboMode);
 renderCalendar();
+Nav.init();
+{
+  const tb = document.getElementById("todayBtn");
+  if (tb) tb.addEventListener("click", goToToday);
+}

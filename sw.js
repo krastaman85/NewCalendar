@@ -1,6 +1,6 @@
 // Service worker con cache shell dell'app e fallback offline.
-const APP_CACHE = "diritti-visita-app-shell-v9";
-const RUNTIME_CACHE = "diritti-visita-runtime-v9";
+const APP_CACHE = "diritti-visita-app-shell-v10";
+const RUNTIME_CACHE = "diritti-visita-runtime-v10";
 const APP_SHELL = [
   "./",
   "./index.html",

@@ -527,3 +527,23 @@
   .pw-row { display: flex; gap: 8px; }
   .pw-row input { flex: 1; min-width: 0; }
   .pw-toggle { padding: 0 12px; }
+
+  /* ═══════════════ NAVIGAZIONE INDIETRO / AVANTI ═══════════════ */
+  .header-nav { display: flex; gap: 6px; margin-left: auto; margin-right: 8px; }
+  .nav-btn {
+    width: 38px; height: 38px; border-radius: 12px; cursor: pointer;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .nav-btn:not(:disabled):active { transform: scale(0.92); background: var(--surface3); }
+  .nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .viewtoggle { gap: 8px; }
+  @media (max-width: 420px) {
+    .header-logo { display: none; }
+    .header-title .sub { display: none; }
+    .header { padding-left: 14px; padding-right: 14px; }
+    .header-nav { margin-right: 6px; gap: 5px; }
+    .nav-btn, .sync-badge, .header-icon-btn { height: 36px; }
+    .nav-btn { width: 34px; }
+  }
