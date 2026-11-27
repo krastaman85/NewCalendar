@@ -524,3 +524,6 @@
   body.readonly .daycell { cursor: default; }
   [hidden] { display: none !important; }
   body.ro-error .tabbar, body.ro-error .content { display: none !important; }
+  .pw-row { display: flex; gap: 8px; }
+  .pw-row input { flex: 1; min-width: 0; }
+  .pw-toggle { padding: 0 12px; }
