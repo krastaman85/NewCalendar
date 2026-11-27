@@ -19,3 +19,8 @@ Italiano, chiaro e operativo. Distinguere dati da inferenze. Dire cosa fa l'uten
 
 ## Database (Supabase `diritti-visita`, ref `cbsqavoengtdloirtxxz`)
 Tabelle: `visits` (user_id, child, day, kind 'pern'|'sing'), `day_notes` (user_id, day, note), `app_settings` (con `schedule`), `visits_audit` (storico, scritto da trigger, non modificabile dai client), `share_links` (token, scadenza, revoca). Funzioni pubbliche: `get_shared_calendar(token)` e `ping()`. Non creare utenti di prova: il trigger lo impedisce; per collaudi usare `tests/collaudo_app_simulato.py` o transazioni con rollback. Trigger `un_solo_proprietario` su `auth.users`. Le correzioni fatte da Claude via SQL compaiono nello storico come «amministrazione SQL».
+
+## Agente automatico (senza costi, attività programmate di Claude)
+- Controllo serale (20:37) e riepilogo mattutino (07:13, il lunedì anche settimanale) + attività mensile del 1° (08:47).
+- L'agente scrive SOLO in `agent_requests` e `agent_log`; non modifica `visits`/`day_notes`: le conferme le applica l'app quando Davide preme «Sì».
+- Non invia e-mail (solo bozze Gmail), non cancella nulla.

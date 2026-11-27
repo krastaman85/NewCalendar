@@ -628,3 +628,16 @@
   }
   .reminder-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .reminder-actions .btn { padding: 8px 12px; font-size: 11px; }
+
+  /* ═══════════════ RICHIESTE DELL'AGENTE ═══════════════ */
+  .agent-inbox { margin-bottom: 16px; }
+  .agent-inbox h4 { font-family: 'Syne', sans-serif; font-size: 13px; margin-bottom: 8px; }
+  .agent-count { color: var(--accent); }
+  .agent-list { display: flex; flex-direction: column; gap: 8px; }
+  .agent-card { padding: 11px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); border-left-width: 4px; }
+  .agent-card.prio-urgente { border-left-color: var(--red); }
+  .agent-card.prio-alta { border-left-color: #f9a825; }
+  .agent-card.prio-normale { border-left-color: var(--accent); }
+  .agent-head { font-size: 12px; font-weight: 600; line-height: 1.5; }
+  .agent-body { font-size: 11px; color: var(--text-dim); line-height: 1.6; margin-top: 5px; white-space: pre-wrap; word-break: break-word; }
+  body.readonly .agent-inbox { display: none !important; }
