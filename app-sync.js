@@ -377,14 +377,24 @@
     statusEl.textContent = s;
   }
 
+  // Chiede al gestore password del telefono/browser di salvare le credenziali.
+  async function storeCredential(email, password) {
+    try {
+      if (window.PasswordCredential && navigator.credentials && navigator.credentials.store) {
+        await navigator.credentials.store(new window.PasswordCredential({ id: email, password, name: email }));
+      }
+    } catch (_) { /* non supportato: nessun problema */ }
+  }
+
   async function doSignIn() {
     const email = ($("syncEmail").value || "").trim();
     const password = $("syncPassword").value || "";
     if (!email || !password) { setMsg("Inserisci e-mail e password.", true); return; }
     setMsg("Accesso in corso…");
     const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { $("syncPassword").value = ""; setMsg(errMsg(error), true); return; }
+    await storeCredential(email, password);
     $("syncPassword").value = "";
-    if (error) { setMsg(errMsg(error), true); return; }
     setMsg("Accesso effettuato. Sincronizzo…");
   }
   async function doSignUp() {
@@ -394,8 +404,9 @@
     if (!confirm("Creare l'account proprietario del calendario con " + email + "?\nSi può creare un solo account.")) return;
     setMsg("Creazione account…");
     const { data, error } = await sb.auth.signUp({ email, password });
+    if (error) { $("syncPassword").value = ""; setMsg(errMsg(error), true); return; }
+    await storeCredential(email, password);
     $("syncPassword").value = "";
-    if (error) { setMsg(errMsg(error), true); return; }
     if (data && data.session) setMsg("Account creato e collegato. Sincronizzo…");
     else setMsg("Account creato. Deve essere attivato: conferma dal link nell'e-mail ricevuta oppure chiedi a Claude di attivarlo, poi premi «Accedi».");
   }
@@ -500,7 +511,12 @@
 
   function wirePanel() {
     const on = (id, fn) => { const e = $(id); if (e) e.addEventListener("click", (ev) => { ev.preventDefault(); fn(); }); };
-    on("syncSignIn", doSignIn);
+    const form = $("syncAuth");
+    if (form) form.addEventListener("submit", (ev) => { ev.preventDefault(); doSignIn(); });
+    on("syncPwToggle", () => {
+      const i = $("syncPassword");
+      i.type = i.type === "password" ? "text" : "password";
+    });
     on("syncSignUp", doSignUp);
     on("syncSignOut", doSignOut);
     on("syncNow", () => { setMsg(""); sync(); });

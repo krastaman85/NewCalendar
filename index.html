@@ -139,14 +139,19 @@
         <h4 id="syncTitle">☁️ Cloud e condivisione</h4>
         <div class="hint sync-status" id="syncStatus" aria-live="polite">—</div>
 
-        <div id="syncAuth" hidden>
-          <div class="field"><label for="syncEmail">E-mail</label><input id="syncEmail" type="email" autocomplete="username" inputmode="email"></div>
-          <div class="field"><label for="syncPassword">Password</label><input id="syncPassword" type="password" autocomplete="current-password"></div>
+        <form id="syncAuth" hidden autocomplete="on" novalidate>
+          <div class="field"><label for="syncEmail">E-mail</label><input id="syncEmail" name="username" type="email" autocomplete="username" inputmode="email"></div>
+          <div class="field"><label for="syncPassword">Password</label>
+            <div class="pw-row">
+              <input id="syncPassword" name="password" type="password" autocomplete="current-password">
+              <button class="btn ghost pw-toggle" type="button" id="syncPwToggle" aria-label="Mostra o nascondi la password">👁</button>
+            </div>
+          </div>
           <div class="btnrow">
-            <button class="btn primary" type="button" id="syncSignIn">Accedi</button>
+            <button class="btn primary" type="submit" id="syncSignIn">Accedi</button>
             <button class="btn ghost" type="button" id="syncSignUp">Crea account (solo la prima volta)</button>
           </div>
-        </div>
+        </form>
 
         <div id="syncUser" hidden>
           <div class="btnrow">
