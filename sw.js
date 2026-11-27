@@ -1,11 +1,14 @@
 // Service worker con cache shell dell'app e fallback offline.
-const APP_CACHE = "diritti-visita-app-shell-v7";
-const RUNTIME_CACHE = "diritti-visita-runtime-v7";
+const APP_CACHE = "diritti-visita-app-shell-v8";
+const RUNTIME_CACHE = "diritti-visita-runtime-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./app.css",
+  "./cloud-config.js",
+  "./supabase.min.js",
   "./app-core.js",
+  "./app-sync.js",
   "./app-bootstrap.js",
   "./app-events.js",
   "./app-pdf.js",
@@ -42,6 +45,12 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
 
   if (request.method !== "GET") {
+    return;
+  }
+
+  // Le richieste verso altri domini (database Supabase) non passano mai
+  // dalla cache: devono arrivare sempre al server o fallire come errore di rete.
+  if (!request.url.startsWith(self.location.origin)) {
     return;
   }
 
