@@ -4,8 +4,10 @@ App web (PWA) per **segnare i giorni di visita** di ogni figlio e **generare i m
 mensili ufficiali** "Richiesta prestazione speciale per diritti di visita"
 (USSI/URAR, Cantone Ticino) in PDF, già compilati e pronti per firma e data a mano.
 
-Tutti i dati restano **solo sul dispositivo** (localStorage): nessun server, nessuna
-condivisione con terzi.
+I dati sono salvati **sul dispositivo** (localStorage). In più, facoltativamente, la
+**sincronizzazione cloud** li copia in un database privato Supabase (server a Zurigo),
+accessibile solo con l'account del proprietario: così telefono, PC e Claude vedono
+lo stesso calendario. Nessuna analisi, nessun tracciamento.
 
 ## Funzionalità
 
@@ -17,6 +19,11 @@ condivisione con terzi.
 - **Generazione PDF** del modulo ufficiale (via `pdf-lib`, caricato solo al bisogno).
 - **Backup / ripristino** dei dati in JSON, con validazione anti-manomissione.
 - **PWA installabile** e funzionante offline (service worker).
+- **Sincronizzazione cloud** (facoltativa): ogni modifica parte subito se c'è rete,
+  altrimenti resta in coda e parte appena la rete torna. Il database fa fede.
+- **Storico modifiche** non cancellabile: data, ora, giorno, valore prima/dopo e autore.
+- **Link di sola lettura**: con nome, scadenza (1 giorno – 1 anno), periodo facoltativo,
+  contatore delle aperture e revoca immediata.
 - **Navigazione a gesto** (swipe) per cambiare mese; design animato e responsivo.
 
 ## Struttura dei file
@@ -26,6 +33,11 @@ condivisione con terzi.
 | `index.html` | Struttura della pagina (markup) |
 | `app.css` | Stili, animazioni, responsività |
 | `app-core.js` | Logica principale (calendario, dati, PDF) |
+| `app-sync.js` | Sincronizzazione cloud, storico, link di sola lettura |
+| `cloud-config.js` | Indirizzo del database e chiave pubblica (non segreta) |
+| `supabase.min.js` | Libreria client Supabase v2 (copia locale, niente CDN) |
+| `supabase/schema.sql` | Struttura del database, regole di accesso, funzioni |
+| `tests/collaudo_sync.py` | Collaudo automatico end-to-end (43 controlli) |
 | `app-events.js` | Delega degli eventi dei pulsanti |
 | `app-bootstrap.js` | Caricamento moduli non critici |
 | `app-pdf.js` | Caricamento on-demand di `pdf-lib` |
@@ -50,5 +62,26 @@ schermata Home".
 
 ## Dati e backup
 
-I dati sono salvati solo nel browser (localStorage). Usa **"Backup"** nella scheda
-Riepilogo per esportare periodicamente una copia di sicurezza.
+I dati sono salvati nel browser (localStorage) e, se la sincronizzazione è attiva, nel
+database. Usa comunque **"Backup"** nella scheda Riepilogo per una copia di sicurezza.
+
+## Sincronizzazione cloud
+
+- Progetto Supabase `diritti-visita` (regione `eu-central-2`, Zurigo).
+- **Un solo account** può esistere: il database rifiuta ogni registrazione successiva.
+- **Row Level Security** su tutte le tabelle: ogni riga è visibile solo al proprietario.
+- La chiave in `cloud-config.js` è la *publishable key*: è pubblica per definizione e
+  da sola non dà accesso ai dati. Le chiavi segrete (service_role) non vanno mai nel repo.
+- Primo collegamento di un dispositivo: si salva una copia locale
+  (`diritti_visita_presync_backup_v1`), poi i giorni presenti solo sul dispositivo
+  vengono caricati; sui giorni in conflitto vale il database.
+- Vista in sola lettura: `…/NewCalendar/#view=<token>`; il token è nel frammento `#`,
+  quindi non arriva nei log del server. La vista non scrive nulla sul dispositivo
+  di chi la apre.
+
+### Collaudo
+
+```bash
+python3 -m pip install playwright
+python3 tests/collaudo_sync.py   # richiede un utente di prova nel database
+```

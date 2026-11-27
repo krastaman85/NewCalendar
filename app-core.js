@@ -2,6 +2,19 @@
 // STATO E PERSISTENZA (localStorage)
 // ══════════════════════════════════════════════════════════════════════
 const STORAGE_KEY = "diritti_visita_data_v1";
+
+// Vista in sola lettura: l'app è aperta da un link "#view=<token>". In questa
+// modalità non si legge né si scrive nulla nel localStorage del dispositivo:
+// i dati arrivano dal link (vedi app-sync.js) e il calendario non è modificabile.
+const READONLY_TOKEN = (location.hash.match(/^#view=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i) || [])[1] || null;
+
+// Notifica alla sincronizzazione cloud (app-sync.js), se presente.
+function syncHook(name, ...args) {
+  try {
+    if (window.CloudSync && typeof window.CloudSync[name] === "function") window.CloudSync[name](...args);
+  } catch (e) { /* la sincronizzazione non deve mai bloccare l'app */ }
+}
+function cloneEntries() { return JSON.parse(JSON.stringify(DATA.entries || {})); }
 const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 const GG = ["L","M","M","G","V","S","D"];
 
@@ -31,6 +44,7 @@ let activeChild = DATA.children[0] || "";
 let comboMode = !!DATA.comboMode;
 
 function loadData() {
+  if (READONLY_TOKEN) return Object.assign(defaultData(), { children: [] });
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultData();
@@ -42,7 +56,11 @@ function loadData() {
     return parsed;
   } catch (e) { return defaultData(); }
 }
-function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
+function saveData() {
+  if (READONLY_TOKEN) return;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
+  catch (e) { toast("⚠ Memoria del dispositivo piena: dati non salvati"); }
+}
 
 function formatItalianDate(date = new Date()) {
   return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
@@ -251,11 +269,13 @@ function renderCalendar(popDay) {
 }
 
 function cycleDay(d) {
+  if (READONLY_TOKEN) return;
   const entry = getEntry(curYear, curMonth, activeChild);
   const cur = entry[d] || "";
   const next = cur === "" ? "pern" : cur === "pern" ? "sing" : "";
   if (next === "") delete entry[d]; else entry[d] = next;
   saveData();
+  syncHook("dayChanged", activeChild, curYear, curMonth, d, next || null);
   renderCalendar(d);
   invalidateGenerated();
 }
@@ -407,17 +427,26 @@ function copyFromPreviousMonth() {
   const prevKey = monthKey(py, pm);
   const curKey = monthKey(curYear, curMonth);
   if (!DATA.entries[prevKey] || !DATA.entries[prevKey][activeChild]) { toast("Nessun dato nel mese precedente"); return; }
+  const before = cloneEntries();
   if (!DATA.entries[curKey]) DATA.entries[curKey] = {};
-  DATA.entries[curKey][activeChild] = JSON.parse(JSON.stringify(DATA.entries[prevKey][activeChild]));
+  // Si copiano solo i giorni che esistono anche nel mese corrente (es. il 31).
+  const src = DATA.entries[prevKey][activeChild];
+  const dim = daysInMonth(curYear, curMonth);
+  const copy = {};
+  Object.keys(src).forEach(k => { if (parseInt(k, 10) <= dim) copy[k] = src[k]; });
+  DATA.entries[curKey][activeChild] = copy;
   saveData(); renderCalendar(); invalidateGenerated();
+  syncHook("entriesChanged", before);
   toast("Copiato dal mese precedente");
 }
 
 function clearMonth() {
   if (!confirm(`Svuotare tutti i giorni di ${activeChild} per ${MESI[curMonth]} ${curYear}?`)) return;
+  const before = cloneEntries();
   const key = monthKey(curYear, curMonth);
   if (DATA.entries[key]) delete DATA.entries[key][activeChild];
   saveData(); renderCalendar(); invalidateGenerated();
+  syncHook("entriesChanged", before);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -505,9 +534,12 @@ if (importInput) {
           updateImportStatus("");
           return;
         }
+        const before = cloneEntries();
         DATA = safe;
         comboMode = !!DATA.comboMode;
         saveData();
+        syncHook("entriesChanged", before);
+        syncHook("settingsChanged");
         activeChild = DATA.children[0] || "";
         renderCalendar();
         invalidateGenerated();
@@ -663,19 +695,34 @@ function saveSettings() {
   const rows = document.querySelectorAll("#childList .childlist-item");
   const children = [];
   const birthdates = {};
+  const renames = [];
   rows.forEach(row => {
-    const name = (row.querySelector(".child-name")?.value || "").trim();
-    if (!name) return;
+    const input = row.querySelector(".child-name");
+    const name = (input?.value || "").trim().slice(0, 60);
+    if (!name || DANGEROUS_KEYS.has(name) || children.includes(name)) return;
+    const oldName = DATA.children[Number(input.dataset.idx)];
+    if (oldName && oldName !== name) renames.push([oldName, name]);
     children.push(name);
     const bday = (row.querySelector(".child-bday")?.value || "").trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(bday)) birthdates[name] = bday;
   });
+  const before = cloneEntries();
   if (children.length) {
+    // Rinomina: i giorni già segnati seguono il nuovo nome del figlio.
+    renames.forEach(([oldName, newName]) => {
+      if (DATA.children.includes(newName)) return; // nome già usato da un altro figlio
+      Object.keys(DATA.entries).forEach(mk => {
+        const month = DATA.entries[mk];
+        if (month && month[oldName] && !month[newName]) { month[newName] = month[oldName]; delete month[oldName]; }
+      });
+    });
     DATA.children = children;
     DATA.birthdates = birthdates;
   }
   if (!DATA.children.includes(activeChild)) activeChild = DATA.children[0];
   saveData(); closeModal("settingsModal"); renderCalendar(); invalidateGenerated();
+  syncHook("entriesChanged", before);
+  syncHook("settingsChanged");
   toast("Impostazioni salvate");
 }
 
